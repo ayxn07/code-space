@@ -130,6 +130,16 @@ export default defineConfig({
               4: 'var(--bolt-elements-bg-depth-4)',
             },
           },
+          // Alias so both bg-bolt-elements-bg-depth-X and
+          // bg-bolt-elements-background-depth-X resolve correctly
+          bg: {
+            depth: {
+              1: 'var(--bolt-elements-bg-depth-1)',
+              2: 'var(--bolt-elements-bg-depth-2)',
+              3: 'var(--bolt-elements-bg-depth-3)',
+              4: 'var(--bolt-elements-bg-depth-4)',
+            },
+          },
           textPrimary: 'var(--bolt-elements-textPrimary)',
           textSecondary: 'var(--bolt-elements-textSecondary)',
           textTertiary: 'var(--bolt-elements-textTertiary)',

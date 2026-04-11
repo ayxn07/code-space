@@ -158,16 +158,38 @@ export function mapThemeToVars(
   vars['--bolt-elements-button-secondary-text'] = isLight ? '#0A0A0A' : '#FFFFFF';
 
   // ── Items (list items, selections) ─────────────────────────────────
+  vars['--bolt-elements-item-contentDefault'] = isLight
+    ? hexAlpha('#0A0A0A', 50)
+    : hexAlpha('#ffffff', 50);
+  vars['--bolt-elements-item-contentActive'] = isLight ? '#0A0A0A' : '#FFFFFF';
   vars['--bolt-elements-item-contentAccent'] = isLight ? accent[700] : accent[500];
+  vars['--bolt-elements-item-backgroundDefault'] = isLight
+    ? 'rgba(0,0,0,0)'
+    : 'rgba(255,255,255,0)';
+  vars['--bolt-elements-item-backgroundActive'] = isLight
+    ? hexAlpha('#808080', 5)
+    : hexAlpha('#ffffff', 10);
   vars['--bolt-elements-item-backgroundAccent'] = accentAlpha[10];
 
   // ── Loader ─────────────────────────────────────────────────────────
+  vars['--bolt-elements-loader-background'] = isLight
+    ? hexAlpha('#808080', 10)
+    : hexAlpha('#ffffff', 10);
   vars['--bolt-elements-loader-progress'] = accent[500];
 
   // ── Messages ───────────────────────────────────────────────────────
+  vars['--bolt-elements-messages-background'] = isLight ? '#F5F5F5' : bgCard;
   vars['--bolt-elements-messages-linkColor'] = accent[500];
+  vars['--bolt-elements-messages-code-background'] = isLight ? '#262626' : bg;
+  vars['--bolt-elements-messages-inlineCode-background'] = isLight
+    ? '#E5E5E5'
+    : darken(bgCard, 0.15);
+  vars['--bolt-elements-messages-inlineCode-text'] = isLight ? '#262626' : '#FFFFFF';
 
   // ── Sidebar ────────────────────────────────────────────────────────
+  vars['--bolt-elements-sidebar-dropdownShadow'] = isLight
+    ? hexAlpha('#808080', 10)
+    : hexAlpha('#000000', 30);
   vars['--bolt-elements-sidebar-background'] = sidebarBg;
   vars['--bolt-elements-sidebar-headerBg'] = isLight
     ? hexAlpha(sidebarBg, 80)
@@ -181,21 +203,47 @@ export function mapThemeToVars(
 
   // ── Artifacts ──────────────────────────────────────────────────────
   vars['--bolt-elements-artifacts-background'] = isLight ? '#ffffff' : bgSecondary;
+  vars['--bolt-elements-artifacts-backgroundHover'] = isLight
+    ? hexAlpha('#808080', 2)
+    : hexAlpha('#ffffff', 5);
+  vars['--bolt-elements-artifacts-inlineCode-background'] = isLight ? '#F5F5F5' : bgCard;
+  vars['--bolt-elements-artifacts-inlineCode-text'] = isLight ? '#0A0A0A' : '#FFFFFF';
 
   // ── Actions ────────────────────────────────────────────────────────
   vars['--bolt-elements-actions-background'] = isLight ? '#ffffff' : bgSecondary;
+  vars['--bolt-elements-actions-code-background'] = isLight ? '#262626' : bgCard;
 
   // ── Terminals ──────────────────────────────────────────────────────
   vars['--bolt-elements-terminals-background'] = bg;
+  vars['--bolt-elements-terminals-buttonBackground'] = isLight
+    ? hexAlpha('#808080', 5)
+    : bgCard;
+
+  // ── Divider ────────────────────────────────────────────────────────
+  vars['--bolt-elements-dividerColor'] = isLight ? '#F5F5F5' : borderColor;
+
+  // ── Icons ──────────────────────────────────────────────────────────
+  vars['--bolt-elements-icon-primary'] = isLight ? '#0A0A0A' : '#FFFFFF';
+  vars['--bolt-elements-icon-secondary'] = isLight ? '#525252' : mutedFg;
+  vars['--bolt-elements-icon-tertiary'] = isLight ? '#737373' : mutedFg;
 
   // ── Prompt ─────────────────────────────────────────────────────────
   vars['--bolt-elements-prompt-background'] = isLight
-    ? 'rgba(255,255,255,0.80)'
-    : 'rgba(128,128,128,0.80)';
+    ? hexAlpha('#ffffff', 80)
+    : hexAlpha(bg, 80);
 
   // ── CTA ────────────────────────────────────────────────────────────
   vars['--bolt-elements-cta-background'] = isLight ? '#F5F5F5' : hexAlpha('#ffffff', 10);
   vars['--bolt-elements-cta-text'] = isLight ? '#0A0A0A' : '#FFFFFF';
+
+  // ── Preview address bar ────────────────────────────────────────────
+  vars['--bolt-elements-preview-addressBar-background'] = isLight ? '#F5F5F5' : bg;
+  vars['--bolt-elements-preview-addressBar-backgroundHover'] = isLight
+    ? hexAlpha('#808080', 5)
+    : hexAlpha('#ffffff', 5);
+  vars['--bolt-elements-preview-addressBar-backgroundActive'] = isLight ? '#ffffff' : bg;
+  vars['--bolt-elements-preview-addressBar-text'] = isLight ? '#525252' : mutedFg;
+  vars['--bolt-elements-preview-addressBar-textActive'] = isLight ? '#0A0A0A' : '#FFFFFF';
 
   // ── Scrollbar ──────────────────────────────────────────────────────
   vars['--modern-scrollbar-thumb-background'] = 'rgba(100,100,100,0.3)';
