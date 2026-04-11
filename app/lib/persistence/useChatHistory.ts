@@ -321,6 +321,9 @@ ${value.content}
 
           logStore.logError('Failed to load chat messages or snapshot', error); // Updated error message
           toast.error('Failed to load chat: ' + error.message); // More specific error
+
+          // Unblock the UI so the user isn't stuck on a blank screen
+          setReady(true);
         });
     } else {
       // Handle case where there is no mixedId (e.g., new chat)

@@ -194,6 +194,8 @@ const postMessageBridgeCode = stripIndents`
     var urlToken = params.get('token');
     if (urlToken) {
       window.__CODESPACE_TOKEN__ = urlToken;
+      // Persist to cookie so token survives full-page navigations (e.g. sidebar <a> clicks)
+      document.cookie = 'codespace_auth=' + urlToken + '; path=/; secure; samesite=none; max-age=3600';
     }
 
     // Also try to extract from cookie
