@@ -3,6 +3,27 @@ import { createPagesFunctionHandler } from '@remix-run/cloudflare-pages';
 import { verifyToken, getTokenFromCookie, makeAuthCookie, unauthorizedResponse, COOKIE_NAME } from '../app/lib/auth/codespace-auth';
 
 /**
+ * Cross-Origin Isolation headers — required for WebContainers (SharedArrayBuffer).
+ * Using "credentialless" COEP instead of "require-corp" so cross-origin
+ * subresources (CDN scripts, LLM API calls, etc.) don't need CORS/CORP headers.
+ */
+const CROSS_ORIGIN_HEADERS: Record<string, string> = {
+  'Cross-Origin-Embedder-Policy': 'credentialless',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+};
+
+/** Apply COOP/COEP headers to an existing Response (clones it). */
+function withCrossOriginHeaders(response: Response): Response {
+  const patched = new Response(response.body, response);
+
+  for (const [key, value] of Object.entries(CROSS_ORIGIN_HEADERS)) {
+    patched.headers.set(key, value);
+  }
+
+  return patched;
+}
+
+/**
  * Cloudflare Pages function handler — catches ALL requests before Remix routes.
  *
  * Auth flow:
@@ -12,6 +33,10 @@ import { verifyToken, getTokenFromCookie, makeAuthCookie, unauthorizedResponse, 
  *
  * Static assets (.js, .css, .svg, etc.) are served by Wrangler before this
  * function runs, so they bypass auth automatically.
+ *
+ * IMPORTANT: Every response sets Cross-Origin-Embedder-Policy and
+ * Cross-Origin-Opener-Policy so that `self.crossOriginIsolated === true`,
+ * which WebContainers (SharedArrayBuffer) requires.
  */
 export const onRequest: PagesFunction = async (context) => {
   const request = context.request;
@@ -21,7 +46,10 @@ export const onRequest: PagesFunction = async (context) => {
   // Health check — bypass auth so Railway/Docker healthcheck gets a 200
   // -----------------------------------------------------------------------
   if (url.pathname === '/health') {
-    return new Response('OK', { status: 200 });
+    return new Response('OK', {
+      status: 200,
+      headers: { ...CROSS_ORIGIN_HEADERS },
+    });
   }
 
   // Get the JWT secret from Cloudflare env bindings or process.env
@@ -44,15 +72,14 @@ export const onRequest: PagesFunction = async (context) => {
     // Strip the token param and redirect to clean URL
     url.searchParams.delete('token');
 
-    const response = new Response(null, {
+    return new Response(null, {
       status: 302,
       headers: {
         Location: url.toString(),
         'Set-Cookie': makeAuthCookie(tokenParam),
+        ...CROSS_ORIGIN_HEADERS,
       },
     });
-
-    return response;
   }
 
   // -----------------------------------------------------------------------
@@ -74,7 +101,10 @@ export const onRequest: PagesFunction = async (context) => {
         build: serverBuild,
       });
 
-      return handler(context);
+      // Run Remix handler and ensure COOP/COEP headers are present
+      const remixResponse = await handler(context);
+
+      return withCrossOriginHeaders(remixResponse);
     }
 
     // Cookie exists but token is invalid/expired — clear it and return 401

@@ -112,7 +112,7 @@ export function unauthorizedResponse(): Response {
     status: 401,
     headers: {
       'Content-Type': 'text/html;charset=utf-8',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Embedder-Policy': 'credentialless',
       'Cross-Origin-Opener-Policy': 'same-origin',
     },
   });
