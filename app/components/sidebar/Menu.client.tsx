@@ -15,6 +15,7 @@ import { useSearchFilter } from '~/lib/hooks/useSearchFilter';
 import { classNames } from '~/utils/classNames';
 import { useStore } from '@nanostores/react';
 import { profileStore } from '~/lib/stores/profile';
+import { codespaceApiBaseUrl, codespaceProfile } from '~/lib/stores/codespace';
 
 const menuVariants = {
   closed: {
@@ -72,6 +73,13 @@ export const Menu = () => {
   const [dialogContent, setDialogContent] = useState<DialogContent>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const profile = useStore(profileStore);
+  const apiBaseUrl = useStore(codespaceApiBaseUrl);
+  const csProfile = useStore(codespaceProfile);
+
+  // Derive dashboard URL from API base + workspace ID
+  const dashboardUrl = apiBaseUrl && csProfile?.workspaceId
+    ? `${apiBaseUrl.replace(/\/$/, '')}/workspace/${csProfile.workspaceId}`
+    : null;
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
@@ -531,6 +539,17 @@ export const Menu = () => {
               </Dialog>
             </DialogRoot>
           </div>
+          {dashboardUrl && (
+            <div className="px-4 pt-2 pb-1 border-t border-bolt-elements-borderColor">
+              <a
+                href={dashboardUrl}
+                className="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg text-sm font-medium bg-accent-600 text-white hover:bg-accent-700 transition-colors"
+              >
+                <span className="i-ph:arrow-left h-4 w-4" />
+                Back to Dashboard
+              </a>
+            </div>
+          )}
           <div className="flex items-center justify-between border-t border-bolt-elements-borderColor px-4 py-3">
             <div className="flex items-center gap-3">
               <SettingsButton onClick={handleSettingsClick} />

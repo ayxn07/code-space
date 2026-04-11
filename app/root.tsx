@@ -219,7 +219,8 @@ const postMessageBridgeCode = stripIndents`
             window.__CODESPACE_PROFILE__ = {
               username: payload.name || payload.email || '',
               email: payload.email || '',
-              userId: payload.sub || ''
+              userId: payload.sub || '',
+              workspaceId: payload.workspace_id || ''
             };
           }
         }
@@ -353,7 +354,7 @@ export default function App() {
 
       // Seed user profile from JWT claims
       if (win.__CODESPACE_PROFILE__) {
-        const p = win.__CODESPACE_PROFILE__ as { username: string; email: string; userId: string };
+        const p = win.__CODESPACE_PROFILE__ as { username: string; email: string; userId: string; workspaceId: string };
         codespaceProfile.set(p);
 
         // Also populate bolt.diy's own profileStore so all existing UI components

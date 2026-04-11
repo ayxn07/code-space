@@ -56,7 +56,27 @@ export interface CodespaceProfile {
   username: string;
   email: string;
   userId: string;
+  workspaceId: string;
 }
 
 /** User profile extracted from the JWT token claims */
 export const codespaceProfile = atom<CodespaceProfile | null>(null);
+
+// ---------------------------------------------------------------------------
+// Dashboard URL (derived from API base + workspace ID)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the URL to navigate back to the main Hack Cortex dashboard.
+ * Format: {codespaceApiBaseUrl}/workspace/{workspaceId}
+ */
+export function getDashboardUrl(): string | null {
+  const baseUrl = codespaceApiBaseUrl.get();
+  const profile = codespaceProfile.get();
+
+  if (!baseUrl || !profile?.workspaceId) {
+    return null;
+  }
+
+  return `${baseUrl.replace(/\/$/, '')}/workspace/${profile.workspaceId}`;
+}

@@ -71,6 +71,7 @@ interface Props {
   id?: unknown;
   doc?: EditorDocument;
   editable?: boolean;
+  isStreaming?: boolean;
   debounceChange?: number;
   debounceScroll?: number;
   autoFocusOnDocumentChange?: boolean;
@@ -130,6 +131,7 @@ export const CodeMirrorEditor = memo(
     debounceChange = 150,
     autoFocusOnDocumentChange = false,
     editable = true,
+    isStreaming = false,
     onScroll,
     onChange,
     onSave,
@@ -153,6 +155,12 @@ export const CodeMirrorEditor = memo(
     const onChangeRef = useRef(onChange);
     const onSaveRef = useRef(onSave);
 
+    // Auto-scroll follow state: tracks whether we should auto-scroll during streaming.
+    // Resets to true when streaming starts, set to false if user scrolls away from bottom.
+    const autoScrollRef = useRef(true);
+    const isStreamingRef = useRef(isStreaming);
+    const prevStreamingRef = useRef(false);
+
     /**
      * This effect is used to avoid side effects directly in the render function
      * and instead the refs are updated after each render.
@@ -166,7 +174,49 @@ export const CodeMirrorEditor = memo(
       // Update the module-level reference for use in tooltip functions
       currentDocRef = doc;
       themeRef.current = theme;
+      isStreamingRef.current = isStreaming;
     });
+
+    // Reset auto-scroll flag when streaming starts (transition from false → true)
+    useEffect(() => {
+      if (isStreaming && !prevStreamingRef.current) {
+        autoScrollRef.current = true;
+      }
+
+      prevStreamingRef.current = isStreaming;
+    }, [isStreaming]);
+
+    // Detect user scroll-away during streaming to disable auto-follow
+    useEffect(() => {
+      const view = viewRef.current;
+
+      if (!view) {
+        return;
+      }
+
+      const scrollDOM = view.scrollDOM;
+
+      function onUserScroll() {
+        if (!isStreamingRef.current) {
+          return;
+        }
+
+        // If user scrolled away from the bottom (more than ~60px tolerance), disable auto-scroll
+        const { scrollTop, scrollHeight, clientHeight } = scrollDOM;
+        const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+
+        if (distanceFromBottom > 60) {
+          autoScrollRef.current = false;
+        } else {
+          // User scrolled back to bottom — re-enable
+          autoScrollRef.current = true;
+        }
+      }
+
+      scrollDOM.addEventListener('scroll', onUserScroll, { passive: true });
+
+      return () => scrollDOM.removeEventListener('scroll', onUserScroll);
+    }, []);
 
     useEffect(() => {
       if (!viewRef.current || !doc || doc.isBinary) {
@@ -297,6 +347,7 @@ export const CodeMirrorEditor = memo(
         languageCompartment,
         autoFocusOnDocumentChange,
         doc as TextEditorDocument,
+        isStreaming && autoScrollRef.current,
       );
 
       // Check if the file is locked and update the editor state accordingly
@@ -308,7 +359,7 @@ export const CodeMirrorEditor = memo(
           effects: [editableStateEffect.of(false)],
         });
       }
-    }, [doc?.value, editable, doc?.filePath, autoFocusOnDocumentChange]);
+    }, [doc?.value, editable, doc?.filePath, autoFocusOnDocumentChange, isStreaming]);
 
     return (
       <div className={classNames('relative h-full', className)}>
@@ -437,6 +488,7 @@ function setEditorDocument(
   languageCompartment: Compartment,
   autoFocus: boolean,
   doc: TextEditorDocument,
+  shouldAutoScroll?: boolean,
 ) {
   if (doc.value !== view.state.doc.toString()) {
     view.dispatch({
@@ -447,6 +499,19 @@ function setEditorDocument(
         insert: doc.value,
       },
     });
+
+    // During streaming, scroll to the end of the document so the user
+    // can watch the code being generated in real-time.
+    if (shouldAutoScroll) {
+      requestAnimationFrame(() => {
+        const docLength = view.state.doc.length;
+
+        view.dispatch({
+          selection: { anchor: docLength },
+          scrollIntoView: true,
+        });
+      });
+    }
   }
 
   // Check if the file is locked
@@ -468,6 +533,12 @@ function setEditorDocument(
     });
 
     requestAnimationFrame(() => {
+      // Skip scroll restoration during auto-scroll streaming — the auto-scroll
+      // in the content dispatch above already positions the viewport at the end.
+      if (shouldAutoScroll) {
+        return;
+      }
+
       const currentLeft = view.scrollDOM.scrollLeft;
       const currentTop = view.scrollDOM.scrollTop;
       const newLeft = doc.scroll?.left ?? 0;

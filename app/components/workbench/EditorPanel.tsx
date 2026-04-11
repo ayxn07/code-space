@@ -167,6 +167,7 @@ export const EditorPanel = memo(
                 <CodeMirrorEditor
                   theme={theme}
                   editable={!isStreaming && editorDocument !== undefined}
+                  isStreaming={isStreaming}
                   settings={editorSettings}
                   doc={editorDocument}
                   autoFocusOnDocumentChange={!isMobile()}
