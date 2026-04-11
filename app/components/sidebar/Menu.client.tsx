@@ -7,6 +7,7 @@ import { ControlPanel } from '~/components/@settings/core/ControlPanel';
 import { SettingsButton, HelpButton } from '~/components/ui/SettingsButton';
 import { Button } from '~/components/ui/Button';
 import { db, deleteById, getAll, chatId, type ChatHistoryItem, useChatHistory } from '~/lib/persistence';
+import { waitForPersistence } from '~/lib/persistence/api-client';
 import { cubicEasingFn } from '~/utils/easings';
 import { HistoryItem } from './HistoryItem';
 import { binDates } from './date-binning';
@@ -88,10 +89,21 @@ export const Menu = () => {
   });
 
   const loadEntries = useCallback(() => {
-    // db parameter is kept for signature compat but getAll() calls the API directly.
-    // Pass db (may be undefined) — getAll gracefully handles it.
-    getAll(db as IDBDatabase)
-      .then((list) => list.filter((item) => item.urlId))
+    // Wait for persistence API (token + base URL) to become available
+    // before fetching chats. On hard navigation these are set asynchronously
+    // and may not be ready when the sidebar first opens.
+    waitForPersistence(5000)
+      .then((available) => {
+        if (!available) {
+          console.warn('[Menu] Persistence not available — cannot load chat list.');
+          return [];
+        }
+
+        // db parameter is kept for signature compat but getAll() calls the API directly.
+        // Pass db (may be undefined) — getAll gracefully handles it.
+        return getAll(db as IDBDatabase);
+      })
+      .then((list) => (list || []).filter((item) => item.urlId))
       .then((list) =>
         list.map((item) => ({
           ...item,
