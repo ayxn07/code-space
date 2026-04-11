@@ -84,23 +84,51 @@ const inlineThemeCode = stripIndents`
       }
     })();
 
-    // Try to extract theme_id from JWT in URL
+    // Try to extract theme_id from JWT — check URL param first, then cookie
     var themeId = null;
-    try {
-      var params = new URLSearchParams(window.location.search);
-      var tk = params.get('token');
-      if (tk) {
-        var parts = tk.split('.');
+    function decodeThemeFromJwt(jwt) {
+      try {
+        var parts = jwt.split('.');
         if (parts.length === 3) {
           var b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
           var payload = JSON.parse(atob(b64));
           if (payload && payload.theme_id) {
-            themeId = payload.theme_id;
-            window.__CODESPACE_THEME_ID__ = themeId;
+            return payload.theme_id;
           }
         }
+      } catch(e) {}
+      return null;
+    }
+
+    // 1. Try URL ?token= param (first visit from dashboard)
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var tk = params.get('token');
+      if (tk) {
+        themeId = decodeThemeFromJwt(tk);
       }
     } catch(e) {}
+
+    // 2. If no theme from URL, try the cookie JWT (reload scenario)
+    if (!themeId) {
+      try {
+        var cookieMatch = document.cookie.match(/(?:^|;\s*)codespace_auth=([^;]*)/);
+        if (cookieMatch && cookieMatch[1]) {
+          themeId = decodeThemeFromJwt(cookieMatch[1]);
+        }
+      } catch(e) {}
+    }
+
+    // 3. If still no theme from any JWT, fall back to localStorage
+    if (!themeId) {
+      themeId = localStorage.getItem('hack_cortex_synced_theme_id');
+    }
+
+    // Persist the theme_id so it survives page reloads
+    if (themeId) {
+      localStorage.setItem('hack_cortex_synced_theme_id', themeId);
+      window.__CODESPACE_THEME_ID__ = themeId;
+    }
 
     // If we got a synced theme, detect dark/light from preset background luminance
     // The full theme colors will be applied by React once hydrated
@@ -168,6 +196,8 @@ const postMessageBridgeCode = stripIndents`
           if (data.themeId) {
             window.__CODESPACE_THEME_ID__ = data.themeId;
             window.__CODESPACE_THEME__ = { mode: data.mode || 'dark', accentId: data.themeId };
+            // Persist theme_id so it survives page reloads
+            localStorage.setItem('hack_cortex_synced_theme_id', data.themeId);
             window.dispatchEvent(new CustomEvent('codespace:theme-updated', { detail: { themeId: data.themeId, mode: data.mode } }));
           } else if (data.mode) {
             // Fallback: simple dark/light toggle without a preset
@@ -398,9 +428,13 @@ export default function App() {
       }
 
       // ─── Apply synced theme from JWT ─────────────────────────────────
-      // The inline script extracted theme_id from the JWT before React loaded.
-      // Now we apply the full theme colors using the mapper.
-      const syncedThemeId = win.__CODESPACE_THEME_ID__ as string | undefined;
+      // The inline script extracted theme_id from the JWT (URL or cookie)
+      // before React loaded and persisted it to localStorage. We try the
+      // window global first, then fall back to localStorage.
+      const syncedThemeId =
+        (win.__CODESPACE_THEME_ID__ as string | undefined) ||
+        localStorage.getItem('hack_cortex_synced_theme_id') ||
+        undefined;
 
       if (syncedThemeId) {
         const preset = findPreset(syncedThemeId);
@@ -412,6 +446,9 @@ export default function App() {
           // Update the theme store so ThemeSwitch and other components are in sync
           themeStore.set(result.mode);
           localStorage.setItem('hack_cortex_theme', result.mode);
+
+          // Persist theme_id so it survives page reloads
+          localStorage.setItem('hack_cortex_synced_theme_id', syncedThemeId);
 
           // Store the synced theme ID for live updates
           codespaceTheme.set({ mode: result.mode, accentId: syncedThemeId });
@@ -440,6 +477,10 @@ export default function App() {
           applyThemeToDOM(result);
           themeStore.set(result.mode);
           localStorage.setItem('hack_cortex_theme', result.mode);
+
+          // Persist theme_id so it survives page reloads
+          localStorage.setItem('hack_cortex_synced_theme_id', detail.themeId);
+
           codespaceTheme.set({ mode: result.mode, accentId: detail.themeId });
         }
       } else if (detail) {
