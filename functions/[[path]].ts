@@ -17,6 +17,13 @@ export const onRequest: PagesFunction = async (context) => {
   const request = context.request;
   const url = new URL(request.url);
 
+  // -----------------------------------------------------------------------
+  // Health check — bypass auth so Railway/Docker healthcheck gets a 200
+  // -----------------------------------------------------------------------
+  if (url.pathname === '/health') {
+    return new Response('OK', { status: 200 });
+  }
+
   // Get the JWT secret from Cloudflare env bindings or process.env
   const secret =
     (context.env as unknown as Record<string, string>)?.CODESPACE_JWT_SECRET ||

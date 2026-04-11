@@ -85,8 +85,9 @@ RUN chmod +x /app/bindings.sh
 EXPOSE ${PORT}
 
 # Healthcheck for deployment platforms (uses $PORT for flexibility)
+# /health bypasses auth middleware so the probe always gets a 200
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=5 \
-  CMD curl -fsS http://localhost:${PORT}/ || exit 1
+  CMD curl -fsS http://localhost:${PORT}/health || exit 1
 
 # Start using dockerstart script with Wrangler
 CMD ["pnpm", "run", "dockerstart"]
