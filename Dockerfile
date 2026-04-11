@@ -27,7 +27,7 @@ COPY . .
 RUN pnpm install --offline --frozen-lockfile
 
 # Build the Remix app (SSR + client)
-RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm run build
+RUN NODE_OPTIONS=--max-old-space-size=2048 pnpm run build
 
 # ---- production dependencies stage ----
 FROM build AS prod-deps
@@ -63,10 +63,12 @@ RUN corepack enable && corepack prepare pnpm@9.15.9 --activate \
   && apt-get update && apt-get install -y --no-install-recommends curl \
   && rm -rf /var/lib/apt/lists/*
 
-# Copy built files, all deps (wrangler is needed at runtime), and function sources
+# Copy pruned production deps (wrangler is now a regular dep so it survives prune)
+COPY --from=prod-deps /app/node_modules /app/node_modules
+COPY --from=prod-deps /app/package.json /app/package.json
+# Copy built output
 COPY --from=build /app/build /app/build
-COPY --from=build /app/node_modules /app/node_modules
-COPY --from=build /app/package.json /app/package.json
+# Copy runtime files needed by Wrangler for SSR function handling
 COPY --from=build /app/bindings.sh /app/bindings.sh
 COPY --from=build /app/functions /app/functions
 COPY --from=build /app/app/lib/auth /app/app/lib/auth
