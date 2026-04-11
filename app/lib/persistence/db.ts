@@ -202,9 +202,10 @@ export async function setMessages(
 
 /**
  * Gets a chat by ID or urlId.
+ * Since the API uses UUIDs as both id and urlId, a single lookup suffices.
  */
 export async function getMessages(_db: IDBDatabase, id: string): Promise<ChatHistoryItem> {
-  return (await getMessagesById(_db, id)) || (await getMessagesByUrlId(_db, id));
+  return getMessagesById(_db, id);
 }
 
 /**

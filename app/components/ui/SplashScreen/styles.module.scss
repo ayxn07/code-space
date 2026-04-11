@@ -1,0 +1,236 @@
+// ---------------------------------------------------------------------------
+// SplashScreen — Curtain-open reveal animation
+// ---------------------------------------------------------------------------
+
+.splashOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: all;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  // Once dismissed, let pointer events fall through and hide
+  &.dismissed {
+    pointer-events: none;
+  }
+}
+
+// ── Curtain halves ──────────────────────────────────────────────────────────
+
+.curtain {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  background: var(--bolt-elements-bg-depth-1);
+  will-change: transform;
+  transition: transform 1s cubic-bezier(0.76, 0, 0.24, 1);
+
+  // Subtle inner shadow to give "fabric edge" depth
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 40px;
+    pointer-events: none;
+  }
+}
+
+.curtainLeft {
+  left: 0;
+  transform: translateX(0);
+
+  &::after {
+    right: 0;
+    background: linear-gradient(to left, rgba(0, 0, 0, 0.08), transparent);
+
+    :global(html[data-theme='light']) & {
+      background: linear-gradient(to left, rgba(0, 0, 0, 0.05), transparent);
+    }
+  }
+}
+
+.curtainRight {
+  right: 0;
+  transform: translateX(0);
+
+  &::after {
+    left: 0;
+    background: linear-gradient(to right, rgba(0, 0, 0, 0.08), transparent);
+
+    :global(html[data-theme='light']) & {
+      background: linear-gradient(to right, rgba(0, 0, 0, 0.05), transparent);
+    }
+  }
+}
+
+// ── Open state ──────────────────────────────────────────────────────────────
+
+.curtainOpen {
+  &.curtainLeft {
+    transform: translateX(-105%);
+  }
+
+  &.curtainRight {
+    transform: translateX(105%);
+  }
+}
+
+// ── Center content (logo + text + loader) ───────────────────────────────────
+
+.centerContent {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  opacity: 1;
+  transition: opacity 0.5s ease-out;
+
+  &.fadeOut {
+    opacity: 0;
+  }
+}
+
+// Logo wrapper with glow + entrance
+.logoWrap {
+  animation: logoEntrance 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  filter: drop-shadow(0 0 30px var(--primary-color)) drop-shadow(0 0 60px var(--secondary-color));
+}
+
+@keyframes logoEntrance {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+    filter: drop-shadow(0 0 0px var(--primary-color)) drop-shadow(0 0 0px var(--secondary-color));
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: drop-shadow(0 0 30px var(--primary-color)) drop-shadow(0 0 60px var(--secondary-color));
+  }
+}
+
+// Pulsing glow after entrance
+.logoPulse {
+  animation: glowPulse 2s ease-in-out infinite alternate;
+}
+
+@keyframes glowPulse {
+  0% {
+    filter: drop-shadow(0 0 20px var(--primary-color)) drop-shadow(0 0 40px var(--secondary-color));
+  }
+  100% {
+    filter: drop-shadow(0 0 40px var(--primary-color)) drop-shadow(0 0 80px var(--secondary-color));
+  }
+}
+
+// Brand text
+.brandText {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--bolt-elements-textPrimary);
+  opacity: 0;
+  animation: textFadeUp 0.6s 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes textFadeUp {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// Tagline under brand
+.tagline {
+  font-size: 0.8rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  color: var(--bolt-elements-textSecondary);
+  opacity: 0;
+  margin-top: -12px;
+  animation: textFadeUp 0.5s 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+// ── Loading bar ─────────────────────────────────────────────────────────────
+
+.loaderWrap {
+  width: 180px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--bolt-elements-bg-depth-3);
+  overflow: hidden;
+  opacity: 0;
+  animation: textFadeUp 0.4s 0.9s ease-out forwards;
+}
+
+.loaderBar {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--primary-color), var(--accent-color), var(--secondary-color));
+  background-size: 200% 100%;
+  width: 0%;
+  animation: loadProgress 1.6s 1s cubic-bezier(0.4, 0, 0.2, 1) forwards,
+    shimmer 1.2s 1s ease-in-out infinite;
+}
+
+@keyframes loadProgress {
+  0% {
+    width: 0%;
+  }
+  60% {
+    width: 75%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+// ── Accent line detail on curtains ──────────────────────────────────────────
+
+.curtainAccent {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--primary-color),
+    var(--accent-color),
+    var(--primary-color),
+    transparent
+  );
+  opacity: 0.4;
+}
+
+.curtainLeft .curtainAccent {
+  right: 0;
+}
+
+.curtainRight .curtainAccent {
+  left: 0;
+}

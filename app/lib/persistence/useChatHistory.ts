@@ -213,6 +213,16 @@ export function useChatHistory() {
     // Reset save state when switching chats
     resetSaveState();
 
+    // CRITICAL: Reset UI state when chat changes so ChatImpl unmounts and
+    // remounts with fresh useChat state. Without this, navigating between
+    // chats leaves stale messages because useChat only reads initialMessages
+    // on mount and _index.tsx / chat.$id.tsx share the same component ref
+    // (React re-renders instead of remounting).
+    setReady(false);
+    setInitialMessages([]);
+    setArchivedMessages([]);
+    setUrlId(undefined);
+
     if (mixedId) {
       // ---------------------------------------------------------------------------
       // Loading an existing chat by ID
@@ -222,7 +232,10 @@ export function useChatHistory() {
       // so we wait briefly for them before attempting to load.
       loadChat(mixedId);
     } else {
-      // No mixedId — new chat. Just mark ready.
+      // No mixedId — new chat. Reset atoms and mark ready.
+      chatId.set(undefined);
+      description.set(undefined);
+      chatMetadata.set(undefined);
       setReady(true);
     }
 
