@@ -98,7 +98,7 @@ const FileModifiedDropdown = memo(
               <Popover.Button className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-bolt-elements-background-depth-2 hover:bg-bolt-elements-background-depth-3 transition-colors text-bolt-elements-item-contentDefault">
                 <span>File Changes</span>
                 {hasChanges && (
-                  <span className="w-5 h-5 rounded-full bg-accent-500/20 text-accent-500 text-xs flex items-center justify-center border border-accent-500/30">
+                  <span className="w-5 h-5 rounded-full bg-[var(--theme-accent-500-20,#9C7DFF33)] text-accent-500 text-xs flex items-center justify-center border border-[var(--theme-accent-500-30,#9C7DFF4D)]">
                     {modifiedFiles.length}
                   </span>
                 )}

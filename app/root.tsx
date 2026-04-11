@@ -64,13 +64,57 @@ const inlineThemeCode = stripIndents`
   setTutorialKitTheme();
 
   function setTutorialKitTheme() {
-    let theme = localStorage.getItem('bolt_theme');
+    // Migrate old bolt_ keys to hack_cortex_ on first load
+    (function migrateKeys() {
+      var oldKeys = [
+        'bolt_theme', 'bolt_user_profile', 'bolt_profile', 'bolt_settings',
+        'bolt_tab_configuration', 'bolt_viewed_features', 'bolt_developer_mode',
+        'bolt_acknowledged_connection_issue', 'bolt_acknowledged_debug_issues',
+        'bolt_read_logs', 'bolt_last_acknowledged_version', 'bolt_chat_history',
+        'bolt_current_model', 'bolt_current_provider', 'bolt_project_type', 'bolt_git_info'
+      ];
+      for (var i = 0; i < oldKeys.length; i++) {
+        var oldKey = oldKeys[i];
+        var newKey = oldKey.replace('bolt_', 'hack_cortex_');
+        var val = localStorage.getItem(oldKey);
+        if (val !== null && localStorage.getItem(newKey) === null) {
+          localStorage.setItem(newKey, val);
+        }
+        localStorage.removeItem(oldKey);
+      }
+    })();
 
-    if (!theme) {
-      theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    // Try to extract theme_id from JWT in URL
+    var themeId = null;
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var tk = params.get('token');
+      if (tk) {
+        var parts = tk.split('.');
+        if (parts.length === 3) {
+          var b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+          var payload = JSON.parse(atob(b64));
+          if (payload && payload.theme_id) {
+            themeId = payload.theme_id;
+            window.__CODESPACE_THEME_ID__ = themeId;
+          }
+        }
+      }
+    } catch(e) {}
+
+    // If we got a synced theme, detect dark/light from preset background luminance
+    // The full theme colors will be applied by React once hydrated
+    var mode = localStorage.getItem('hack_cortex_theme');
+    if (!mode) {
+      mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
 
-    document.querySelector('html')?.setAttribute('data-theme', theme);
+    // For synced themes, always default to dark mode (most presets are dark-first)
+    if (themeId && themeId !== 'dark' && themeId !== 'light') {
+      mode = 'dark';
+    }
+
+    document.querySelector('html')?.setAttribute('data-theme', mode);
   }
 `;
 
@@ -118,11 +162,17 @@ const postMessageBridgeCode = stripIndents`
           break;
 
         case 'codespace:theme-sync':
-          if (data.mode) {
-            // Update bolt.diy's theme
+          // Store the themeId for React to pick up and apply via theme mapper.
+          // The inline script cannot import ES modules, so full theme application
+          // happens in the React onThemeUpdated listener.
+          if (data.themeId) {
+            window.__CODESPACE_THEME_ID__ = data.themeId;
+            window.__CODESPACE_THEME__ = { mode: data.mode || 'dark', accentId: data.themeId };
+            window.dispatchEvent(new CustomEvent('codespace:theme-updated', { detail: { themeId: data.themeId, mode: data.mode } }));
+          } else if (data.mode) {
+            // Fallback: simple dark/light toggle without a preset
             document.querySelector('html')?.setAttribute('data-theme', data.mode);
-            localStorage.setItem('bolt_theme', data.mode);
-            // Store for React
+            localStorage.setItem('hack_cortex_theme', data.mode);
             window.__CODESPACE_THEME__ = { mode: data.mode, accentId: data.accentId || '' };
             window.dispatchEvent(new CustomEvent('codespace:theme-updated', { detail: window.__CODESPACE_THEME__ }));
           }
@@ -240,6 +290,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 import { logStore } from './lib/stores/logs';
 import { codespaceToken, codespaceTheme, codespaceGitHub, codespaceApiBaseUrl, codespaceProfile } from './lib/stores/codespace';
 import { profileStore, updateProfile } from './lib/stores/profile';
+import { findPreset } from './lib/themes/presets';
+import { mapThemeToVars, applyThemeToDOM } from './lib/themes/theme-mapper';
 
 export default function App() {
   const theme = useStore(themeStore);
@@ -316,6 +368,27 @@ export default function App() {
       if (loaderData?.codespaceApiBaseUrl) {
         codespaceApiBaseUrl.set(loaderData.codespaceApiBaseUrl);
       }
+
+      // ─── Apply synced theme from JWT ─────────────────────────────────
+      // The inline script extracted theme_id from the JWT before React loaded.
+      // Now we apply the full theme colors using the mapper.
+      const syncedThemeId = win.__CODESPACE_THEME_ID__ as string | undefined;
+
+      if (syncedThemeId) {
+        const preset = findPreset(syncedThemeId);
+
+        if (preset) {
+          const result = mapThemeToVars(preset);
+          applyThemeToDOM(result);
+
+          // Update the theme store so ThemeSwitch and other components are in sync
+          themeStore.set(result.mode);
+          localStorage.setItem('hack_cortex_theme', result.mode);
+
+          // Store the synced theme ID for live updates
+          codespaceTheme.set({ mode: result.mode, accentId: syncedThemeId });
+        }
+      }
     }
 
     // Live update listeners
@@ -330,7 +403,19 @@ export default function App() {
     const onThemeUpdated = (e: Event) => {
       const detail = (e as CustomEvent).detail;
 
-      if (detail) {
+      if (detail?.themeId) {
+        // Live theme sync: full preset application via mapper
+        const preset = findPreset(detail.themeId);
+
+        if (preset) {
+          const result = mapThemeToVars(preset);
+          applyThemeToDOM(result);
+          themeStore.set(result.mode);
+          localStorage.setItem('hack_cortex_theme', result.mode);
+          codespaceTheme.set({ mode: result.mode, accentId: detail.themeId });
+        }
+      } else if (detail) {
+        // Simple mode-only update (no preset)
         codespaceTheme.set(detail);
       }
     };

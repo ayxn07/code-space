@@ -858,7 +858,7 @@ class DebugLogger {
     try {
       // Try to get from localStorage or environment
       if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem('bolt_current_model');
+        const stored = localStorage.getItem('hack_cortex_current_model');
 
         if (stored) {
           return stored;
@@ -874,7 +874,7 @@ class DebugLogger {
   private _getCurrentProvider(): string {
     try {
       if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem('bolt_current_provider');
+        const stored = localStorage.getItem('hack_cortex_current_provider');
 
         if (stored) {
           return stored;
@@ -890,7 +890,7 @@ class DebugLogger {
   private _getProjectType(): string {
     try {
       if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem('bolt_project_type');
+        const stored = localStorage.getItem('hack_cortex_project_type');
 
         if (stored) {
           return stored;
@@ -941,7 +941,7 @@ class DebugLogger {
   private _getGitInfoFallback(): AppInfo['gitInfo'] {
     try {
       // Try to get from localStorage (could be set by the app)
-      const stored = localStorage.getItem('bolt_git_info');
+      const stored = localStorage.getItem('hack_cortex_git_info');
 
       if (stored) {
         return JSON.parse(stored);

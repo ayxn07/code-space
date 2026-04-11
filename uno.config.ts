@@ -35,17 +35,17 @@ const BASE_COLORS = {
     950: '#0A0A0A',
   },
   accent: {
-    50: '#F8F5FF',
-    100: '#F0EBFF',
-    200: '#E1D6FF',
-    300: '#CEBEFF',
-    400: '#B69EFF',
-    500: '#9C7DFF',
-    600: '#8A5FFF',
-    700: '#7645E8',
-    800: '#6234BB',
-    900: '#502D93',
-    950: '#2D1959',
+    50: 'var(--theme-accent-50, #F8F5FF)',
+    100: 'var(--theme-accent-100, #F0EBFF)',
+    200: 'var(--theme-accent-200, #E1D6FF)',
+    300: 'var(--theme-accent-300, #CEBEFF)',
+    400: 'var(--theme-accent-400, #B69EFF)',
+    500: 'var(--theme-accent-500, #9C7DFF)',
+    600: 'var(--theme-accent-600, #8A5FFF)',
+    700: 'var(--theme-accent-700, #7645E8)',
+    800: 'var(--theme-accent-800, #6234BB)',
+    900: 'var(--theme-accent-900, #502D93)',
+    950: 'var(--theme-accent-950, #2D1959)',
   },
   green: {
     50: '#F0FDF4',
@@ -87,13 +87,16 @@ const BASE_COLORS = {
   },
 };
 
+// Raw hex values for alpha palette generation (cannot use var() with hex alpha suffixes)
+const ACCENT_RAW_HEX = '#9C7DFF';
+
 const COLOR_PRIMITIVES = {
   ...BASE_COLORS,
   alpha: {
     white: generateAlphaPalette(BASE_COLORS.white),
     gray: generateAlphaPalette(BASE_COLORS.gray[900]),
     red: generateAlphaPalette(BASE_COLORS.red[500]),
-    accent: generateAlphaPalette(BASE_COLORS.accent[500]),
+    accent: generateAlphaPalette(ACCENT_RAW_HEX),
   },
 };
 
