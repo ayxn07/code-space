@@ -192,8 +192,8 @@ export function mapThemeToVars(
     : hexAlpha('#000000', 30);
   vars['--bolt-elements-sidebar-background'] = sidebarBg;
   vars['--bolt-elements-sidebar-headerBg'] = isLight
-    ? lighten(sidebarBg, 3)
-    : lighten(sidebarBg, 5);
+    ? lighten(sidebarBg, 0.03)
+    : lighten(sidebarBg, 0.05);
   vars['--bolt-elements-sidebar-border'] = isLight
     ? hexAlpha('#808080', 10)
     : hexAlpha('#ffffff', 8);
