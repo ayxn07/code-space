@@ -19,4 +19,7 @@ interface Env {
   XAI_API_KEY: string;
   PERPLEXITY_API_KEY: string;
   AWS_BEDROCK_CONFIG: string;
+  // Codespace integration
+  CODESPACE_JWT_SECRET: string;
+  CODESPACE_API_BASE_URL: string;
 }

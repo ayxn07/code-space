@@ -1,7 +1,18 @@
 import type { Message } from 'ai';
 import { createScopedLogger } from '~/utils/logger';
 import type { ChatHistoryItem } from './useChatHistory';
-import type { Snapshot } from './types'; // Import Snapshot type
+import type { Snapshot } from './types';
+import {
+  apiListChats,
+  apiGetChat,
+  apiCreateChat,
+  apiUpdateChat,
+  apiDeleteChat,
+  apiListMessages,
+  apiBulkCreateMessages,
+  type ApiChat,
+  type ApiMessage,
+} from './api-client';
 
 export interface IChatMetadata {
   gitUrl: string;
@@ -11,7 +22,10 @@ export interface IChatMetadata {
 
 const logger = createScopedLogger('ChatHistory');
 
-// this is used at the top level and never rejects
+// ---------------------------------------------------------------------------
+// IndexedDB — kept ONLY for snapshots (too large for API, local-only is fine)
+// ---------------------------------------------------------------------------
+
 export async function openDatabase(): Promise<IDBDatabase | undefined> {
   if (typeof indexedDB === 'undefined') {
     console.error('indexedDB is not available in this environment.');
@@ -51,19 +65,92 @@ export async function openDatabase(): Promise<IDBDatabase | undefined> {
   });
 }
 
-export async function getAll(db: IDBDatabase): Promise<ChatHistoryItem[]> {
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction('chats', 'readonly');
-    const store = transaction.objectStore('chats');
-    const request = store.getAll();
+// ---------------------------------------------------------------------------
+// Conversion helpers: ApiChat/ApiMessage ↔ ChatHistoryItem
+// ---------------------------------------------------------------------------
 
-    request.onsuccess = () => resolve(request.result as ChatHistoryItem[]);
-    request.onerror = () => reject(request.error);
-  });
+function apiChatToHistoryItem(chat: ApiChat, messages: Message[]): ChatHistoryItem {
+  return {
+    id: chat.id,
+    urlId: chat.id, // API uses UUIDs as IDs — use same for urlId
+    description: chat.title || undefined,
+    messages,
+    timestamp: chat.created_at,
+    metadata: (chat.metadata as unknown as IChatMetadata) || undefined,
+  };
 }
 
+function apiMessageToAiMessage(msg: ApiMessage): Message {
+  // The API stores the full AI SDK Message as JSON in the content field
+  // If it was stored as a serialized Message object, parse it back
+  try {
+    const parsed = JSON.parse(msg.content);
+
+    // If parsed result has the expected Message shape, use it
+    if (parsed && typeof parsed === 'object' && 'role' in parsed && 'content' in parsed) {
+      return {
+        ...parsed,
+        id: parsed.id || msg.id,
+      } as Message;
+    }
+  } catch {
+    // Not JSON — treat content as plain text
+  }
+
+  return {
+    id: msg.id,
+    role: msg.role,
+    content: msg.content,
+  } as Message;
+}
+
+function aiMessageToApiFormat(msg: Message): {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  metadata?: Record<string, unknown>;
+} {
+  // Serialize the full Message object as JSON to preserve all fields
+  // (annotations, tool calls, data, etc.)
+  const role = (['user', 'assistant', 'system'].includes(msg.role) ? msg.role : 'assistant') as
+    | 'user'
+    | 'assistant'
+    | 'system';
+
+  return {
+    role,
+    content: JSON.stringify(msg),
+    metadata: { originalId: msg.id },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Chat CRUD — delegated to API client
+// The `db: IDBDatabase` parameter is kept for signature compatibility but
+// ignored for chat operations. Callers still pass the IDB instance.
+// ---------------------------------------------------------------------------
+
+/**
+ * Lists all chats (newest first).
+ */
+export async function getAll(_db: IDBDatabase): Promise<ChatHistoryItem[]> {
+  try {
+    const chats = await apiListChats();
+
+    // For listing, we return chats without messages (they'll be loaded on demand)
+    return chats.map((chat) =>
+      apiChatToHistoryItem(chat, []),
+    );
+  } catch (error) {
+    logger.error('Failed to list chats from API', error);
+    return [];
+  }
+}
+
+/**
+ * Saves/updates a chat and its messages.
+ */
 export async function setMessages(
-  db: IDBDatabase,
+  _db: IDBDatabase,
   id: string,
   messages: Message[],
   urlId?: string,
@@ -71,236 +158,233 @@ export async function setMessages(
   timestamp?: string,
   metadata?: IChatMetadata,
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction('chats', 'readwrite');
-    const store = transaction.objectStore('chats');
+  if (timestamp && isNaN(Date.parse(timestamp))) {
+    throw new Error('Invalid timestamp');
+  }
 
-    if (timestamp && isNaN(Date.parse(timestamp))) {
-      reject(new Error('Invalid timestamp'));
-      return;
+  try {
+    // Try to get existing chat first
+    const existing = await apiGetChat(id);
+
+    if (existing) {
+      // Update existing chat
+      await apiUpdateChat(id, {
+        title: description,
+        metadata: metadata as unknown as Record<string, unknown>,
+      });
+    } else {
+      // Create new chat — the API will assign the ID
+      const created = await apiCreateChat({
+        title: description,
+        metadata: {
+          ...(metadata as unknown as Record<string, unknown>),
+          _boltId: id,
+          _boltUrlId: urlId,
+        },
+      });
+
+      // Update the ID mapping — store the API-assigned ID
+      // For now we use the API ID directly since we control creation
+      id = created.id;
     }
 
-    const request = store.put({
-      id,
-      messages,
-      urlId,
-      description,
-      timestamp: timestamp ?? new Date().toISOString(),
-      metadata,
-    });
+    // Sync messages: bulk create (the API endpoint handles replacement)
+    if (messages.length > 0) {
+      const apiMessages = messages.map(aiMessageToApiFormat);
 
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-}
+      // Send in chunks to avoid SSE timeout issues
+      const CHUNK_SIZE = 50;
 
-export async function getMessages(db: IDBDatabase, id: string): Promise<ChatHistoryItem> {
-  return (await getMessagesById(db, id)) || (await getMessagesByUrlId(db, id));
-}
-
-export async function getMessagesByUrlId(db: IDBDatabase, id: string): Promise<ChatHistoryItem> {
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction('chats', 'readonly');
-    const store = transaction.objectStore('chats');
-    const index = store.index('urlId');
-    const request = index.get(id);
-
-    request.onsuccess = () => resolve(request.result as ChatHistoryItem);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-export async function getMessagesById(db: IDBDatabase, id: string): Promise<ChatHistoryItem> {
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction('chats', 'readonly');
-    const store = transaction.objectStore('chats');
-    const request = store.get(id);
-
-    request.onsuccess = () => resolve(request.result as ChatHistoryItem);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-export async function deleteById(db: IDBDatabase, id: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(['chats', 'snapshots'], 'readwrite'); // Add snapshots store to transaction
-    const chatStore = transaction.objectStore('chats');
-    const snapshotStore = transaction.objectStore('snapshots');
-
-    const deleteChatRequest = chatStore.delete(id);
-    const deleteSnapshotRequest = snapshotStore.delete(id); // Also delete snapshot
-
-    let chatDeleted = false;
-    let snapshotDeleted = false;
-
-    const checkCompletion = () => {
-      if (chatDeleted && snapshotDeleted) {
-        resolve(undefined);
+      for (let i = 0; i < apiMessages.length; i += CHUNK_SIZE) {
+        const chunk = apiMessages.slice(i, i + CHUNK_SIZE);
+        await apiBulkCreateMessages(id, chunk);
       }
-    };
-
-    deleteChatRequest.onsuccess = () => {
-      chatDeleted = true;
-      checkCompletion();
-    };
-    deleteChatRequest.onerror = () => reject(deleteChatRequest.error);
-
-    deleteSnapshotRequest.onsuccess = () => {
-      snapshotDeleted = true;
-      checkCompletion();
-    };
-
-    deleteSnapshotRequest.onerror = (event) => {
-      if ((event.target as IDBRequest).error?.name === 'NotFoundError') {
-        snapshotDeleted = true;
-        checkCompletion();
-      } else {
-        reject(deleteSnapshotRequest.error);
-      }
-    };
-
-    transaction.oncomplete = () => {
-      // This might resolve before checkCompletion if one operation finishes much faster
-    };
-    transaction.onerror = () => reject(transaction.error);
-  });
-}
-
-export async function getNextId(db: IDBDatabase): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction('chats', 'readonly');
-    const store = transaction.objectStore('chats');
-    const request = store.getAllKeys();
-
-    request.onsuccess = () => {
-      const highestId = request.result.reduce((cur, acc) => Math.max(+cur, +acc), 0);
-      resolve(String(+highestId + 1));
-    };
-
-    request.onerror = () => reject(request.error);
-  });
-}
-
-export async function getUrlId(db: IDBDatabase, id: string): Promise<string> {
-  const idList = await getUrlIds(db);
-
-  if (!idList.includes(id)) {
-    return id;
-  } else {
-    let i = 2;
-
-    while (idList.includes(`${id}-${i}`)) {
-      i++;
     }
-
-    return `${id}-${i}`;
+  } catch (error) {
+    logger.error('Failed to save messages to API', error);
+    throw error;
   }
 }
 
-async function getUrlIds(db: IDBDatabase): Promise<string[]> {
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction('chats', 'readonly');
-    const store = transaction.objectStore('chats');
-    const idList: string[] = [];
-
-    const request = store.openCursor();
-
-    request.onsuccess = (event: Event) => {
-      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
-
-      if (cursor) {
-        idList.push(cursor.value.urlId);
-        cursor.continue();
-      } else {
-        resolve(idList);
-      }
-    };
-
-    request.onerror = () => {
-      reject(request.error);
-    };
-  });
+/**
+ * Gets a chat by ID or urlId.
+ */
+export async function getMessages(_db: IDBDatabase, id: string): Promise<ChatHistoryItem> {
+  return (await getMessagesById(_db, id)) || (await getMessagesByUrlId(_db, id));
 }
 
-export async function forkChat(db: IDBDatabase, chatId: string, messageId: string): Promise<string> {
-  const chat = await getMessages(db, chatId);
+/**
+ * Gets a chat by urlId. Since API uses UUIDs as both id and urlId,
+ * this is equivalent to getMessagesById.
+ */
+export async function getMessagesByUrlId(_db: IDBDatabase, id: string): Promise<ChatHistoryItem> {
+  return getMessagesById(_db, id);
+}
+
+/**
+ * Gets a chat by its primary ID, including all messages.
+ */
+export async function getMessagesById(_db: IDBDatabase, id: string): Promise<ChatHistoryItem> {
+  try {
+    const chat = await apiGetChat(id);
+
+    if (!chat) {
+      return undefined as unknown as ChatHistoryItem;
+    }
+
+    const apiMessages = await apiListMessages(id);
+    const messages = apiMessages.map(apiMessageToAiMessage);
+
+    return apiChatToHistoryItem(chat, messages);
+  } catch (error) {
+    logger.error('Failed to get chat from API', error);
+    return undefined as unknown as ChatHistoryItem;
+  }
+}
+
+/**
+ * Deletes a chat by ID. Also deletes the local snapshot.
+ */
+export async function deleteById(db: IDBDatabase, id: string): Promise<void> {
+  try {
+    await apiDeleteChat(id);
+  } catch (error) {
+    logger.error('Failed to delete chat from API', error);
+    throw error;
+  }
+
+  // Also delete local snapshot
+  try {
+    await deleteSnapshot(db, id);
+  } catch {
+    // Snapshot deletion is best-effort
+  }
+}
+
+/**
+ * Gets the next available chat ID. With API-backed storage,
+ * the server assigns UUIDs, but we still need a temporary ID
+ * for the client until the chat is created server-side.
+ */
+export async function getNextId(_db: IDBDatabase): Promise<string> {
+  // Generate a temporary UUID-like ID
+  // The actual UUID will be assigned by the server on creation
+  return crypto.randomUUID ? crypto.randomUUID() : `temp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/**
+ * Gets a unique URL-friendly ID. With API-backed storage, we use
+ * the chat UUID directly as the URL ID.
+ */
+export async function getUrlId(_db: IDBDatabase, id: string): Promise<string> {
+  // With API storage, the UUID is unique — just return it
+  return id;
+}
+
+/**
+ * Forks a chat at a specific message.
+ */
+export async function forkChat(_db: IDBDatabase, chatId: string, messageId: string): Promise<string> {
+  const chat = await getMessages(_db, chatId);
 
   if (!chat) {
     throw new Error('Chat not found');
   }
 
-  // Find the index of the message to fork at
   const messageIndex = chat.messages.findIndex((msg) => msg.id === messageId);
 
   if (messageIndex === -1) {
     throw new Error('Message not found');
   }
 
-  // Get messages up to and including the selected message
   const messages = chat.messages.slice(0, messageIndex + 1);
 
-  return createChatFromMessages(db, chat.description ? `${chat.description} (fork)` : 'Forked chat', messages);
+  return createChatFromMessages(_db, chat.description ? `${chat.description} (fork)` : 'Forked chat', messages);
 }
 
-export async function duplicateChat(db: IDBDatabase, id: string): Promise<string> {
-  const chat = await getMessages(db, id);
+/**
+ * Duplicates a chat with all its messages.
+ */
+export async function duplicateChat(_db: IDBDatabase, id: string): Promise<string> {
+  const chat = await getMessages(_db, id);
 
   if (!chat) {
     throw new Error('Chat not found');
   }
 
-  return createChatFromMessages(db, `${chat.description || 'Chat'} (copy)`, chat.messages);
+  return createChatFromMessages(_db, `${chat.description || 'Chat'} (copy)`, chat.messages);
 }
 
+/**
+ * Creates a new chat from a set of messages.
+ */
 export async function createChatFromMessages(
-  db: IDBDatabase,
+  _db: IDBDatabase,
   description: string,
   messages: Message[],
   metadata?: IChatMetadata,
 ): Promise<string> {
-  const newId = await getNextId(db);
-  const newUrlId = await getUrlId(db, newId); // Get a new urlId for the duplicated chat
+  try {
+    const created = await apiCreateChat({
+      title: description,
+      metadata: metadata as unknown as Record<string, unknown>,
+    });
 
-  await setMessages(
-    db,
-    newId,
-    messages,
-    newUrlId, // Use the new urlId
-    description,
-    undefined, // Use the current timestamp
-    metadata,
-  );
+    // Bulk create messages
+    if (messages.length > 0) {
+      const apiMessages = messages.map(aiMessageToApiFormat);
 
-  return newUrlId; // Return the urlId instead of id for navigation
+      const CHUNK_SIZE = 50;
+
+      for (let i = 0; i < apiMessages.length; i += CHUNK_SIZE) {
+        const chunk = apiMessages.slice(i, i + CHUNK_SIZE);
+        await apiBulkCreateMessages(created.id, chunk);
+      }
+    }
+
+    return created.id; // Return the API-assigned UUID for navigation
+  } catch (error) {
+    logger.error('Failed to create chat from messages', error);
+    throw error;
+  }
 }
 
-export async function updateChatDescription(db: IDBDatabase, id: string, description: string): Promise<void> {
-  const chat = await getMessages(db, id);
-
-  if (!chat) {
-    throw new Error('Chat not found');
-  }
-
+/**
+ * Updates a chat's description (title).
+ */
+export async function updateChatDescription(_db: IDBDatabase, id: string, description: string): Promise<void> {
   if (!description.trim()) {
     throw new Error('Description cannot be empty');
   }
 
-  await setMessages(db, id, chat.messages, chat.urlId, description, chat.timestamp, chat.metadata);
+  try {
+    await apiUpdateChat(id, { title: description });
+  } catch (error) {
+    logger.error('Failed to update chat description', error);
+    throw error;
+  }
 }
 
+/**
+ * Updates a chat's metadata.
+ */
 export async function updateChatMetadata(
-  db: IDBDatabase,
+  _db: IDBDatabase,
   id: string,
   metadata: IChatMetadata | undefined,
 ): Promise<void> {
-  const chat = await getMessages(db, id);
-
-  if (!chat) {
-    throw new Error('Chat not found');
+  try {
+    await apiUpdateChat(id, { metadata: metadata as unknown as Record<string, unknown> });
+  } catch (error) {
+    logger.error('Failed to update chat metadata', error);
+    throw error;
   }
-
-  await setMessages(db, id, chat.messages, chat.urlId, chat.description, chat.timestamp, metadata);
 }
+
+// ---------------------------------------------------------------------------
+// Snapshot CRUD — stays 100% IndexedDB (snapshots are large file maps,
+// local-only storage is acceptable)
+// ---------------------------------------------------------------------------
 
 export async function getSnapshot(db: IDBDatabase, chatId: string): Promise<Snapshot | undefined> {
   return new Promise((resolve, reject) => {
