@@ -37,7 +37,7 @@ RUN pnpm prune --prod --ignore-scripts
 
 
 # ---- production stage ----
-FROM prod-deps AS bolt-ai-production
+FROM node:22-bookworm-slim AS bolt-ai-production
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -58,15 +58,20 @@ ENV WRANGLER_SEND_METRICS=false \
 # Note: API keys should be provided at runtime via docker run -e or docker-compose
 # Example: docker run -e OPENAI_API_KEY=your_key_here ...
 
-# Install curl for healthchecks and copy bindings script
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
+# Install curl for healthchecks and pnpm for running scripts
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate \
+  && apt-get update && apt-get install -y --no-install-recommends curl \
   && rm -rf /var/lib/apt/lists/*
 
-# Copy built files and scripts
-COPY --from=prod-deps /app/build /app/build
-COPY --from=prod-deps /app/node_modules /app/node_modules
-COPY --from=prod-deps /app/package.json /app/package.json
-COPY --from=prod-deps /app/bindings.sh /app/bindings.sh
+# Copy built files, all deps (wrangler is needed at runtime), and function sources
+COPY --from=build /app/build /app/build
+COPY --from=build /app/node_modules /app/node_modules
+COPY --from=build /app/package.json /app/package.json
+COPY --from=build /app/bindings.sh /app/bindings.sh
+COPY --from=build /app/functions /app/functions
+COPY --from=build /app/app/lib/auth /app/app/lib/auth
+COPY --from=build /app/worker-configuration.d.ts /app/worker-configuration.d.ts
+COPY --from=build /app/wrangler.toml /app/wrangler.toml
 
 # Pre-configure wrangler to disable metrics
 RUN mkdir -p /root/.config/.wrangler && \
