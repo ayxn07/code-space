@@ -161,11 +161,17 @@ $code-font-size: 13px;
 
     :is(th, td) {
       padding: 6px 13px;
-      border: 1px solid #dfe2e5;
+      border: 1px solid var(--bolt-elements-borderColor);
+    }
+
+    th {
+      background-color: var(--bolt-elements-bg-depth-3);
+      color: var(--bolt-elements-textPrimary);
+      font-weight: 600;
     }
 
     tr:nth-child(2n) {
-      background-color: #f6f8fa;
+      background-color: var(--bolt-elements-bg-depth-2);
     }
   }
 }
