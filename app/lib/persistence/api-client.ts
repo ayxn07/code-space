@@ -58,23 +58,6 @@ function getBaseUrl(): string | null {
     return url;
   }
 
-  // Fallback: try document.referrer, but ONLY if we're inside an iframe.
-  // When accessed directly (not embedded), document.referrer is either empty
-  // or points to bolt.diy itself — using it would cause 404 loops.
-  if (typeof window !== 'undefined' && window.parent !== window && typeof document !== 'undefined' && document.referrer) {
-    try {
-      const origin = new URL(document.referrer).origin;
-
-      // Sanity: don't use referrer if it points to our own origin
-      if (origin !== window.location.origin) {
-        codespaceApiBaseUrl.set(origin);
-        return origin;
-      }
-    } catch {
-      // ignore malformed referrer
-    }
-  }
-
   // Not configured — log once and return null
   if (!_warnedNoBaseUrl) {
     _warnedNoBaseUrl = true;
@@ -171,6 +154,7 @@ export async function apiGetChat(chatId: string): Promise<ApiChat | null> {
  * Throws if persistence is not configured (caller should check isPersistenceAvailable first).
  */
 export async function apiCreateChat(body: {
+  id?: string;
   title?: string;
   model?: string;
   provider?: string;
@@ -281,6 +265,34 @@ export async function apiBulkCreateMessages(
   try {
     const data = await apiFetch<{ count: number }>(`/api/codespace/chats/${chatId}/messages`, {
       method: 'POST',
+      body: JSON.stringify({ messages }),
+    });
+    return data.count;
+  } catch (error) {
+    if (error instanceof ApiNotConfiguredError) {
+      return 0;
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Replaces ALL messages for a chat (idempotent full sync).
+ * Deletes existing messages then inserts the provided set.
+ * Returns 0 if persistence is not configured.
+ */
+export async function apiReplaceMessages(
+  chatId: string,
+  messages: Array<{
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    metadata?: Record<string, unknown>;
+  }>,
+): Promise<number> {
+  try {
+    const data = await apiFetch<{ count: number }>(`/api/codespace/chats/${chatId}/messages`, {
+      method: 'PUT',
       body: JSON.stringify({ messages }),
     });
     return data.count;

@@ -47,3 +47,16 @@ export const codespaceGitHub = atom<CodespaceGitHub | null>(null);
  * Set from CODESPACE_API_BASE_URL env var or derived from document.referrer.
  */
 export const codespaceApiBaseUrl = atom<string | null>(null);
+
+// ---------------------------------------------------------------------------
+// User Profile (decoded from JWT)
+// ---------------------------------------------------------------------------
+
+export interface CodespaceProfile {
+  username: string;
+  email: string;
+  userId: string;
+}
+
+/** User profile extracted from the JWT token claims */
+export const codespaceProfile = atom<CodespaceProfile | null>(null);

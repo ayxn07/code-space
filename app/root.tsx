@@ -154,6 +154,28 @@ const postMessageBridgeCode = stripIndents`
       }
     }
 
+    // Decode JWT payload to extract user profile (name, email)
+    // JWT format: header.payload.signature — payload is base64url-encoded JSON
+    if (window.__CODESPACE_TOKEN__) {
+      try {
+        var parts = window.__CODESPACE_TOKEN__.split('.');
+        if (parts.length === 3) {
+          // base64url → base64 → decode
+          var b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+          var payload = JSON.parse(atob(b64));
+          if (payload && (payload.name || payload.email)) {
+            window.__CODESPACE_PROFILE__ = {
+              username: payload.name || payload.email || '',
+              email: payload.email || '',
+              userId: payload.sub || ''
+            };
+          }
+        }
+      } catch(e) {
+        // JWT decode failed — ignore, profile will use fallback
+      }
+    }
+
     // Send ready signal once DOM is loaded
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', sendReady);
@@ -216,7 +238,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 import { logStore } from './lib/stores/logs';
-import { codespaceToken, codespaceTheme, codespaceGitHub, codespaceApiBaseUrl } from './lib/stores/codespace';
+import { codespaceToken, codespaceTheme, codespaceGitHub, codespaceApiBaseUrl, codespaceProfile } from './lib/stores/codespace';
+import { profileStore, updateProfile } from './lib/stores/profile';
 
 export default function App() {
   const theme = useStore(themeStore);
@@ -272,6 +295,21 @@ export default function App() {
         codespaceGitHub.set(
           win.__CODESPACE_GITHUB__ as { connected: boolean; token: string | null; username: string | null },
         );
+      }
+
+      // Seed user profile from JWT claims
+      if (win.__CODESPACE_PROFILE__) {
+        const p = win.__CODESPACE_PROFILE__ as { username: string; email: string; userId: string };
+        codespaceProfile.set(p);
+
+        // Also populate bolt.diy's own profileStore so all existing UI components
+        // (Menu, AvatarDropdown, UserMessage) show the real name instead of "Guest User".
+        // Only seed if the user hasn't already set a custom profile.
+        const existingProfile = profileStore.get();
+
+        if (!existingProfile?.username) {
+          updateProfile({ username: p.username });
+        }
       }
 
       // Set API base URL from the root loader (server env → client)

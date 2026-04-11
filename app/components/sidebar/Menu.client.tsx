@@ -82,7 +82,13 @@ export const Menu = () => {
   const loadEntries = useCallback(() => {
     if (db) {
       getAll(db)
-        .then((list) => list.filter((item) => item.urlId && item.description))
+        .then((list) => list.filter((item) => item.urlId))
+        .then((list) =>
+          list.map((item) => ({
+            ...item,
+            description: item.description || 'New Chat',
+          })),
+        )
         .then(setList)
         .catch((error) => toast.error(error.message));
     }

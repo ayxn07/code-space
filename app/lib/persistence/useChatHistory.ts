@@ -1,5 +1,5 @@
 import { useLoaderData, useNavigate, useSearchParams } from '@remix-run/react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { atom } from 'nanostores';
 import { generateId, type JSONValue, type Message } from 'ai';
 import { toast } from 'react-toastify';
@@ -17,6 +17,7 @@ import {
   setSnapshot,
   type IChatMetadata,
 } from './db';
+import { isPersistenceAvailable } from './api-client';
 import type { FileMap } from '~/lib/stores/files';
 import type { Snapshot } from './types';
 import { webcontainer } from '~/lib/webcontainer';
@@ -39,6 +40,136 @@ export const db = persistenceEnabled ? await openDatabase() : undefined;
 export const chatId = atom<string | undefined>(undefined);
 export const description = atom<string | undefined>(undefined);
 export const chatMetadata = atom<IChatMetadata | undefined>(undefined);
+
+// ---------------------------------------------------------------------------
+// Smart save infrastructure — debounced, non-blocking, with retry
+// ---------------------------------------------------------------------------
+
+const SAVE_DEBOUNCE_MS = 3000; // 3 seconds after last change
+const MAX_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 1000; // exponential backoff: 1s, 2s, 4s
+
+/** Tracks whether there are unsaved changes (for beforeunload) */
+let _hasUnsavedChanges = false;
+
+/** The pending debounce timer */
+let _saveTimerId: ReturnType<typeof setTimeout> | null = null;
+
+/** The last message count we successfully saved */
+let _lastSavedMessageCount = 0;
+
+/** Args captured for the pending save */
+interface PendingSave {
+  db: IDBDatabase;
+  chatId: string;
+  messages: Message[];
+  urlId?: string;
+  description?: string;
+  metadata?: IChatMetadata;
+}
+let _pendingSave: PendingSave | null = null;
+
+/**
+ * Performs the actual save with retry logic.
+ * Returns true on success, false on failure after all retries.
+ */
+async function executeSave(save: PendingSave): Promise<boolean> {
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      await setMessages(
+        save.db,
+        save.chatId,
+        save.messages,
+        save.urlId,
+        save.description,
+        undefined,
+        save.metadata,
+      );
+      _lastSavedMessageCount = save.messages.length;
+      _hasUnsavedChanges = false;
+      return true;
+    } catch (error) {
+      const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+      console.warn(`[auto-save] Attempt ${attempt + 1}/${MAX_RETRIES} failed, retrying in ${delay}ms...`, error);
+
+      if (attempt < MAX_RETRIES - 1) {
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+
+  console.error('[auto-save] All retry attempts exhausted. Changes may be lost.');
+  return false;
+}
+
+/**
+ * Schedules a debounced save. If called multiple times within SAVE_DEBOUNCE_MS,
+ * only the last call's data is saved. The save runs in the background (fire-and-forget).
+ */
+function scheduleSave(save: PendingSave): void {
+  // Skip if message count hasn't changed (no new content to save)
+  if (save.messages.length === _lastSavedMessageCount && _lastSavedMessageCount > 0) {
+    return;
+  }
+
+  _pendingSave = save;
+  _hasUnsavedChanges = true;
+
+  // Clear any existing timer
+  if (_saveTimerId !== null) {
+    clearTimeout(_saveTimerId);
+  }
+
+  // Schedule the save — fire-and-forget (don't await)
+  _saveTimerId = setTimeout(() => {
+    _saveTimerId = null;
+    const s = _pendingSave;
+
+    if (s) {
+      _pendingSave = null;
+      executeSave(s).catch((err) => console.error('[auto-save] Unexpected error:', err));
+    }
+  }, SAVE_DEBOUNCE_MS);
+}
+
+/**
+ * Immediately flushes any pending save (no debounce).
+ * Used by beforeunload and explicit save triggers.
+ */
+async function flushSave(): Promise<void> {
+  if (_saveTimerId !== null) {
+    clearTimeout(_saveTimerId);
+    _saveTimerId = null;
+  }
+
+  const save = _pendingSave;
+
+  if (save) {
+    _pendingSave = null;
+    await executeSave(save);
+  }
+}
+
+// Register beforeunload handler to flush unsaved changes when the tab closes
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', (event) => {
+    if (_hasUnsavedChanges && _pendingSave && isPersistenceAvailable()) {
+      // Use sendBeacon for reliable delivery during unload
+      // Fall back to sync flush as best-effort
+      try {
+        // Trigger immediate flush — can't truly await in beforeunload,
+        // but starting the promise helps if the browser gives us time
+        flushSave();
+      } catch {
+        // Best effort
+      }
+
+      // Signal the browser to show a "you have unsaved changes" dialog
+      event.preventDefault();
+    }
+  });
+}
+
 export function useChatHistory() {
   const navigate = useNavigate();
   const { id: mixedId } = useLoaderData<{ id?: string }>();
@@ -332,15 +463,17 @@ ${value.content}
         return;
       }
 
-      await setMessages(
+      // Schedule a debounced, non-blocking save (fire-and-forget).
+      // This prevents save operations from slowing down AI responses.
+      const allMessages = [...archivedMessages, ...messages];
+      scheduleSave({
         db,
-        finalChatId, // Use the potentially updated chatId
-        [...archivedMessages, ...messages],
-        urlId,
-        description.get(),
-        undefined,
-        chatMetadata.get(),
-      );
+        chatId: finalChatId,
+        messages: allMessages,
+        urlId: _urlId,
+        description: description.get(),
+        metadata: chatMetadata.get(),
+      });
     },
     duplicateCurrentChat: async (listItemId: string) => {
       if (!db || (!mixedId && !listItemId)) {

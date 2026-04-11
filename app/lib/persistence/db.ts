@@ -9,7 +9,7 @@ import {
   apiUpdateChat,
   apiDeleteChat,
   apiListMessages,
-  apiBulkCreateMessages,
+  apiReplaceMessages,
   isPersistenceAvailable,
   type ApiChat,
   type ApiMessage,
@@ -179,37 +179,24 @@ export async function setMessages(
         metadata: metadata as unknown as Record<string, unknown>,
       });
     } else {
-      // Create new chat — the API will assign the ID
-      const created = await apiCreateChat({
+      // Create new chat — pass the client-generated UUID so server uses it as PK.
+      // This keeps the client chatId nanostore, the URL, and the server record in sync.
+      await apiCreateChat({
+        id,
         title: description,
-        metadata: {
-          ...(metadata as unknown as Record<string, unknown>),
-          _boltId: id,
-          _boltUrlId: urlId,
-        },
+        metadata: (metadata as unknown as Record<string, unknown>) || {},
       });
-
-      // Update the ID mapping — store the API-assigned ID
-      // For now we use the API ID directly since we control creation
-      id = created.id;
     }
 
-    // Sync messages: bulk create (the API endpoint handles replacement)
+    // Sync messages: replace all (idempotent — no duplicates on repeated saves)
     if (messages.length > 0) {
       const apiMessages = messages.map(aiMessageToApiFormat);
-
-      // Send in chunks to avoid SSE timeout issues
-      const CHUNK_SIZE = 50;
-
-      for (let i = 0; i < apiMessages.length; i += CHUNK_SIZE) {
-        const chunk = apiMessages.slice(i, i + CHUNK_SIZE);
-        await apiBulkCreateMessages(id, chunk);
-      }
+      await apiReplaceMessages(id, apiMessages);
     }
   } catch (error) {
     // Log but do NOT re-throw — persistence errors should not
     // break the chat experience or trigger toast errors
-    logger.error('Failed to save messages to API', error);
+    logger.error(`Failed to save chat ${id} (${messages.length} messages) to API`, error);
   }
 }
 
@@ -341,21 +328,22 @@ export async function createChatFromMessages(
   }
 
   try {
+    // Generate a UUID for the new chat and pass it to the server
+    // so client and server stay in sync
+    const newId = crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
     const created = await apiCreateChat({
+      id: newId,
       title: description,
       metadata: metadata as unknown as Record<string, unknown>,
     });
 
-    // Bulk create messages
+    // Insert messages for the new chat
     if (messages.length > 0) {
       const apiMessages = messages.map(aiMessageToApiFormat);
-
-      const CHUNK_SIZE = 50;
-
-      for (let i = 0; i < apiMessages.length; i += CHUNK_SIZE) {
-        const chunk = apiMessages.slice(i, i + CHUNK_SIZE);
-        await apiBulkCreateMessages(created.id, chunk);
-      }
+      await apiReplaceMessages(created.id, apiMessages);
     }
 
     return created.id; // Return the API-assigned UUID for navigation
