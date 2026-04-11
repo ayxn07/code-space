@@ -53,14 +53,16 @@ ARG DEFAULT_NUM_CTX
 ENV WRANGLER_SEND_METRICS=false \
     VITE_LOG_LEVEL=${VITE_LOG_LEVEL} \
     DEFAULT_NUM_CTX=${DEFAULT_NUM_CTX} \
-    RUNNING_IN_DOCKER=true
+    RUNNING_IN_DOCKER=true \
+    NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 
 # Note: API keys should be provided at runtime via docker run -e or docker-compose
 # Example: docker run -e OPENAI_API_KEY=your_key_here ...
 
-# Install curl for healthchecks and pnpm for running scripts
+# Install curl for healthchecks, ca-certificates for TLS, and pnpm for running scripts
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate \
-  && apt-get update && apt-get install -y --no-install-recommends curl \
+  && apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+  && update-ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
 # Copy pruned production deps (wrangler is now a regular dep so it survives prune)
