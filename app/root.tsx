@@ -229,6 +229,28 @@ const postMessageBridgeCode = stripIndents`
       }
     }
 
+    // Capture the referrer origin as a fallback for the dashboard URL.
+    // When the user is redirected from the main app, document.referrer
+    // contains the main app URL before navigation clears it.
+    // Persist to localStorage so it survives in-app navigation.
+    if (document.referrer) {
+      try {
+        var refOrigin = new URL(document.referrer).origin;
+        // Only store if it's a different origin (i.e., the parent app, not self)
+        if (refOrigin !== window.location.origin) {
+          window.__CODESPACE_REFERRER_ORIGIN__ = refOrigin;
+          localStorage.setItem('hack_cortex_dashboard_origin', refOrigin);
+        }
+      } catch(e) {}
+    }
+    // Fall back to previously stored origin
+    if (!window.__CODESPACE_REFERRER_ORIGIN__) {
+      var stored = localStorage.getItem('hack_cortex_dashboard_origin');
+      if (stored) {
+        window.__CODESPACE_REFERRER_ORIGIN__ = stored;
+      }
+    }
+
     // Send ready signal once DOM is loaded
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', sendReady);
@@ -368,8 +390,11 @@ export default function App() {
       }
 
       // Set API base URL from the root loader (server env → client)
+      // Falls back to the referrer origin captured by the inline script
       if (loaderData?.codespaceApiBaseUrl) {
         codespaceApiBaseUrl.set(loaderData.codespaceApiBaseUrl);
+      } else if (win.__CODESPACE_REFERRER_ORIGIN__) {
+        codespaceApiBaseUrl.set(win.__CODESPACE_REFERRER_ORIGIN__ as string);
       }
 
       // ─── Apply synced theme from JWT ─────────────────────────────────
