@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '@nanostores/react';
 import { IconButton } from '~/components/ui/IconButton';
 import { workbenchStore } from '~/lib/stores/workbench';
@@ -7,6 +7,8 @@ import { ScreenshotSelector } from './ScreenshotSelector';
 import { expoUrlAtom } from '~/lib/stores/qrCodeStore';
 import { ExpoQrModal } from '~/components/workbench/ExpoQrModal';
 import type { ElementInfo } from './Inspector';
+import { webcontainer } from '~/lib/webcontainer';
+import { WORK_DIR } from '~/utils/constants';
 
 type ResizeSide = 'left' | 'right' | null;
 
@@ -69,6 +71,52 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const [isDeviceModeOn, setIsDeviceModeOn] = useState(false);
   const [widthPercent, setWidthPercent] = useState<number>(37.5);
   const [currentWidth, setCurrentWidth] = useState<number>(0);
+  const [isStartingServer, setIsStartingServer] = useState(false);
+  const [serverStartError, setServerStartError] = useState<string | null>(null);
+
+  // Detect plain HTML project (has index.html but no package.json)
+  const filesStore = useStore(workbenchStore.files);
+  const isPlainHtmlProject = useMemo(() => {
+    const hasIndexHtml = Object.keys(filesStore).some(
+      (path) => path === `${WORK_DIR}/index.html` || path.endsWith('/index.html'),
+    );
+    const hasPackageJson = Object.keys(filesStore).some(
+      (path) => path === `${WORK_DIR}/package.json` || path.endsWith('/package.json'),
+    );
+
+    return hasIndexHtml && !hasPackageJson;
+  }, [filesStore]);
+
+  const handleStartStaticServer = useCallback(async () => {
+    setIsStartingServer(true);
+    setServerStartError(null);
+
+    try {
+      const wc = await webcontainer;
+      const process = await wc.spawn('npx', ['--yes', 'serve'], { cwd: WORK_DIR });
+
+      // Don't await process.exit — it's a long-running server.
+      // WebContainer will fire 'server-ready' when it starts listening,
+      // which PreviewsStore picks up automatically.
+      process.exit.then((exitCode) => {
+        if (exitCode !== 0) {
+          setServerStartError(`Server exited with code ${exitCode}`);
+          setIsStartingServer(false);
+        }
+      });
+    } catch (error: any) {
+      console.error('Failed to start static server:', error);
+      setServerStartError(error?.message || 'Failed to start server');
+      setIsStartingServer(false);
+    }
+  }, []);
+
+  // Clear loading state when preview becomes available (server started successfully)
+  useEffect(() => {
+    if (activePreview && isStartingServer) {
+      setIsStartingServer(false);
+    }
+  }, [activePreview, isStartingServer]);
 
   const resizingState = useRef({
     isResizing: false,
@@ -1012,7 +1060,42 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
             </>
           ) : (
             <div className="flex w-full h-full justify-center items-center bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary">
-              No preview available
+              {isPlainHtmlProject ? (
+                <div className="flex flex-col items-center gap-4">
+                  {isStartingServer ? (
+                    <>
+                      <div className="i-svg-spinners:90-ring-with-bg text-4xl text-bolt-elements-textSecondary" />
+                      <p className="text-sm text-bolt-elements-textSecondary">Starting preview server...</p>
+                    </>
+                  ) : serverStartError ? (
+                    <>
+                      <div className="i-ph:warning-circle text-4xl text-red-400" />
+                      <p className="text-sm text-red-400">{serverStartError}</p>
+                      <button
+                        onClick={handleStartStaticServer}
+                        className="px-4 py-2 rounded-md bg-bolt-elements-button-primary-background text-bolt-elements-button-primary-text hover:bg-bolt-elements-button-primary-backgroundHover transition-colors text-sm"
+                      >
+                        Retry
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleStartStaticServer}
+                        className="flex items-center gap-2 px-6 py-3 rounded-lg bg-bolt-elements-button-primary-background text-bolt-elements-button-primary-text hover:bg-bolt-elements-button-primary-backgroundHover transition-colors text-base font-medium"
+                      >
+                        <span className="i-ph:play-fill text-lg" />
+                        Start Preview Server
+                      </button>
+                      <p className="text-xs text-bolt-elements-textSecondary">
+                        Plain HTML project detected — click to start a static file server
+                      </p>
+                    </>
+                  )}
+                </div>
+              ) : (
+                'No preview available'
+              )}
             </div>
           )}
 
