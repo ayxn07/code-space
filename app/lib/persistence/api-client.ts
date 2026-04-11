@@ -85,6 +85,37 @@ class ApiNotConfiguredError extends Error {
   }
 }
 
+/**
+ * Waits for the persistence API to become available (token + baseUrl set).
+ * The nanostores are populated asynchronously from JWT/referrer in root.tsx,
+ * so on initial page load they may not be set yet when useChatHistory runs.
+ *
+ * Returns true if persistence became available, false if timed out.
+ */
+export async function waitForPersistence(timeoutMs = 3000): Promise<boolean> {
+  if (isPersistenceAvailable()) {
+    return true;
+  }
+
+  const pollInterval = 50;
+  let elapsed = 0;
+
+  return new Promise<boolean>((resolve) => {
+    const timer = setInterval(() => {
+      elapsed += pollInterval;
+
+      if (isPersistenceAvailable()) {
+        clearInterval(timer);
+        resolve(true);
+      } else if (elapsed >= timeoutMs) {
+        clearInterval(timer);
+        console.warn(`[codespace-api] Persistence not available after ${timeoutMs}ms. Token or base URL missing.`);
+        resolve(false);
+      }
+    }, pollInterval);
+  });
+}
+
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const baseUrl = getBaseUrl();
 
@@ -138,14 +169,30 @@ export async function apiListChats(): Promise<ApiChat[]> {
 
 /**
  * Gets a single chat by ID.
- * Returns null if persistence is not configured.
+ * Returns null if persistence is not configured or chat not found.
+ * Throws on auth/network errors so callers can distinguish failure modes.
  */
 export async function apiGetChat(chatId: string): Promise<ApiChat | null> {
   try {
     const data = await apiFetch<{ chat: ApiChat }>(`/api/codespace/chats/${chatId}`);
     return data.chat;
-  } catch {
-    return null;
+  } catch (error) {
+    // API not configured — graceful no-op
+    if (error instanceof ApiNotConfiguredError) {
+      return null;
+    }
+
+    // 404 / "not found" — the chat genuinely doesn't exist
+    const msg = error instanceof Error ? error.message : String(error);
+
+    if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
+      console.info(`[codespace-api] Chat ${chatId} not found (404).`);
+      return null;
+    }
+
+    // Auth, network, or other server errors — rethrow so callers can handle
+    console.error(`[codespace-api] Failed to get chat ${chatId}:`, msg);
+    throw error;
   }
 }
 

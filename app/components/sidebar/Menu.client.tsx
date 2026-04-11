@@ -89,26 +89,22 @@ export const Menu = () => {
   });
 
   const loadEntries = useCallback(() => {
-    if (db) {
-      getAll(db)
-        .then((list) => list.filter((item) => item.urlId))
-        .then((list) =>
-          list.map((item) => ({
-            ...item,
-            description: item.description || 'New Chat',
-          })),
-        )
-        .then(setList)
-        .catch((error) => toast.error(error.message));
-    }
+    // db parameter is kept for signature compat but getAll() calls the API directly.
+    // Pass db (may be undefined) — getAll gracefully handles it.
+    getAll(db as IDBDatabase)
+      .then((list) => list.filter((item) => item.urlId))
+      .then((list) =>
+        list.map((item) => ({
+          ...item,
+          description: item.description || 'New Chat',
+        })),
+      )
+      .then(setList)
+      .catch((error) => toast.error(error.message));
   }, []);
 
   const deleteChat = useCallback(
     async (id: string): Promise<void> => {
-      if (!db) {
-        throw new Error('Database not available');
-      }
-
       // Delete chat snapshot from localStorage
       try {
         const snapshotKey = `snapshot:${id}`;
@@ -118,11 +114,11 @@ export const Menu = () => {
         console.error(`Error deleting snapshot for chat ${id}:`, snapshotError);
       }
 
-      // Delete the chat from the database
-      await deleteById(db, id);
+      // Delete the chat from the database (API + local snapshot)
+      await deleteById(db as IDBDatabase, id);
       console.log('Successfully deleted chat:', id);
     },
-    [db],
+    [],
   );
 
   const deleteItem = useCallback(
@@ -165,8 +161,8 @@ export const Menu = () => {
 
   const deleteSelectedItems = useCallback(
     async (itemsToDeleteIds: string[]) => {
-      if (!db || itemsToDeleteIds.length === 0) {
-        console.log('Bulk delete skipped: No DB or no items to delete.');
+      if (itemsToDeleteIds.length === 0) {
+        console.log('Bulk delete skipped: No items to delete.');
         return;
       }
 
@@ -214,7 +210,7 @@ export const Menu = () => {
         window.location.pathname = '/';
       }
     },
-    [deleteChat, loadEntries, db],
+    [deleteChat, loadEntries],
   );
 
   const closeDialog = () => {

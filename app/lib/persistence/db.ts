@@ -250,11 +250,13 @@ export async function deleteById(db: IDBDatabase, id: string): Promise<void> {
     }
   }
 
-  // Also delete local snapshot
-  try {
-    await deleteSnapshot(db, id);
-  } catch {
-    // Snapshot deletion is best-effort
+  // Also delete local snapshot (IndexedDB — best-effort, may not be available)
+  if (db) {
+    try {
+      await deleteSnapshot(db, id);
+    } catch {
+      // Snapshot deletion is best-effort
+    }
   }
 }
 
