@@ -220,6 +220,9 @@ export default defineConfig({
           },
           sidebar: {
             dropdownShadow: 'var(--bolt-elements-sidebar-dropdownShadow)',
+            background: 'var(--bolt-elements-sidebar-background)',
+            headerBg: 'var(--bolt-elements-sidebar-headerBg)',
+            border: 'var(--bolt-elements-sidebar-border)',
             buttonBackgroundDefault: 'var(--bolt-elements-sidebar-buttonBackgroundDefault)',
             buttonBackgroundHover: 'var(--bolt-elements-sidebar-buttonBackgroundHover)',
             buttonText: 'var(--bolt-elements-sidebar-buttonText)',

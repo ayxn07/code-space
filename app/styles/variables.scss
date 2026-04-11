@@ -66,6 +66,9 @@
   --bolt-elements-prompt-background: theme('colors.alpha.white.80');
 
   --bolt-elements-sidebar-dropdownShadow: theme('colors.alpha.gray.10');
+  --bolt-elements-sidebar-background: theme('colors.white');
+  --bolt-elements-sidebar-headerBg: theme('colors.gray.50');
+  --bolt-elements-sidebar-border: theme('colors.gray.100');
   --bolt-elements-sidebar-buttonBackgroundDefault: theme('colors.alpha.accent.10');
   --bolt-elements-sidebar-buttonBackgroundHover: theme('colors.alpha.accent.20');
   --bolt-elements-sidebar-buttonText: theme('colors.accent.700');
@@ -174,6 +177,9 @@
   --bolt-elements-prompt-background: theme('colors.alpha.gray.80');
 
   --bolt-elements-sidebar-dropdownShadow: theme('colors.alpha.gray.30');
+  --bolt-elements-sidebar-background: theme('colors.gray.950');
+  --bolt-elements-sidebar-headerBg: theme('colors.gray.900');
+  --bolt-elements-sidebar-border: rgba(255, 255, 255, 0.08);
   --bolt-elements-sidebar-buttonBackgroundDefault: theme('colors.alpha.accent.10');
   --bolt-elements-sidebar-buttonBackgroundHover: theme('colors.alpha.accent.20');
   --bolt-elements-sidebar-buttonText: theme('colors.accent.500');

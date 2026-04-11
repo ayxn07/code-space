@@ -168,6 +168,13 @@ export function mapThemeToVars(
   vars['--bolt-elements-messages-linkColor'] = accent[500];
 
   // ── Sidebar ────────────────────────────────────────────────────────
+  vars['--bolt-elements-sidebar-background'] = sidebarBg;
+  vars['--bolt-elements-sidebar-headerBg'] = isLight
+    ? hexAlpha(sidebarBg, 80)
+    : hexAlpha(lighten(sidebarBg, 5), 80);
+  vars['--bolt-elements-sidebar-border'] = isLight
+    ? hexAlpha('#808080', 10)
+    : hexAlpha('#ffffff', 8);
   vars['--bolt-elements-sidebar-buttonBackgroundDefault'] = accentAlpha[10];
   vars['--bolt-elements-sidebar-buttonBackgroundHover'] = accentAlpha[20];
   vars['--bolt-elements-sidebar-buttonText'] = isLight ? accent[700] : accent[500];
