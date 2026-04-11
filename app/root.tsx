@@ -1,6 +1,7 @@
 import { useStore } from '@nanostores/react';
-import type { LinksFunction } from '@remix-run/cloudflare';
-import { Links, Meta, Outlet, Scripts, ScrollRestoration } from '@remix-run/react';
+import type { LinksFunction, LoaderFunctionArgs } from '@remix-run/cloudflare';
+import { json } from '@remix-run/cloudflare';
+import { Links, Meta, Outlet, Scripts, ScrollRestoration, useLoaderData } from '@remix-run/react';
 import tailwindReset from '@unocss/reset/tailwind-compat.css?url';
 import { themeStore } from './lib/stores/theme';
 import { stripIndents } from './utils/stripIndent';
@@ -46,6 +47,18 @@ export const links: LinksFunction = () => [
     href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Root Loader — passes server-side env vars to the client
+// ---------------------------------------------------------------------------
+
+export async function loader({ context }: LoaderFunctionArgs) {
+  const env = (context.cloudflare?.env || {}) as unknown as Record<string, string>;
+
+  return json({
+    codespaceApiBaseUrl: env.CODESPACE_API_BASE_URL || process.env.CODESPACE_API_BASE_URL || null,
+  });
+}
 
 const inlineThemeCode = stripIndents`
   setTutorialKitTheme();
@@ -208,6 +221,9 @@ import { codespaceToken, codespaceTheme, codespaceGitHub, codespaceApiBaseUrl } 
 export default function App() {
   const theme = useStore(themeStore);
 
+  // Read server-injected env vars from the root loader
+  const loaderData = useLoaderData<typeof loader>();
+
   useEffect(() => {
     logStore.logSystem('Application initialized', {
       theme,
@@ -258,19 +274,9 @@ export default function App() {
         );
       }
 
-      // Set API base URL from env var (injected by Wrangler/Docker)
-      // Falls back to document.referrer (set automatically by api-client.ts)
-      try {
-        const envBaseUrl =
-          (typeof import.meta !== 'undefined' &&
-            (import.meta as unknown as Record<string, Record<string, string>>).env?.VITE_CODESPACE_API_BASE_URL) ||
-          undefined;
-
-        if (envBaseUrl) {
-          codespaceApiBaseUrl.set(envBaseUrl);
-        }
-      } catch {
-        // ignore — not critical, api-client.ts will fall back to document.referrer
+      // Set API base URL from the root loader (server env → client)
+      if (loaderData?.codespaceApiBaseUrl) {
+        codespaceApiBaseUrl.set(loaderData.codespaceApiBaseUrl);
       }
     }
 

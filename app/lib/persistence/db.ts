@@ -10,6 +10,7 @@ import {
   apiDeleteChat,
   apiListMessages,
   apiBulkCreateMessages,
+  isPersistenceAvailable,
   type ApiChat,
   type ApiMessage,
 } from './api-client';
@@ -158,6 +159,11 @@ export async function setMessages(
   timestamp?: string,
   metadata?: IChatMetadata,
 ): Promise<void> {
+  // Gracefully skip if persistence API is not configured
+  if (!isPersistenceAvailable()) {
+    return;
+  }
+
   if (timestamp && isNaN(Date.parse(timestamp))) {
     throw new Error('Invalid timestamp');
   }
@@ -201,8 +207,9 @@ export async function setMessages(
       }
     }
   } catch (error) {
+    // Log but do NOT re-throw — persistence errors should not
+    // break the chat experience or trigger toast errors
     logger.error('Failed to save messages to API', error);
-    throw error;
   }
 }
 
@@ -246,11 +253,14 @@ export async function getMessagesById(_db: IDBDatabase, id: string): Promise<Cha
  * Deletes a chat by ID. Also deletes the local snapshot.
  */
 export async function deleteById(db: IDBDatabase, id: string): Promise<void> {
-  try {
-    await apiDeleteChat(id);
-  } catch (error) {
-    logger.error('Failed to delete chat from API', error);
-    throw error;
+  if (isPersistenceAvailable()) {
+    try {
+      await apiDeleteChat(id);
+    } catch (error) {
+      logger.error('Failed to delete chat from API', error);
+
+      // Don't re-throw — still try to clean up local snapshot
+    }
   }
 
   // Also delete local snapshot
@@ -324,6 +334,12 @@ export async function createChatFromMessages(
   messages: Message[],
   metadata?: IChatMetadata,
 ): Promise<string> {
+  // If persistence is not available, return a local ID — chat will work
+  // in-memory but won't be saved server-side
+  if (!isPersistenceAvailable()) {
+    return crypto.randomUUID ? crypto.randomUUID() : `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  }
+
   try {
     const created = await apiCreateChat({
       title: description,
@@ -357,11 +373,14 @@ export async function updateChatDescription(_db: IDBDatabase, id: string, descri
     throw new Error('Description cannot be empty');
   }
 
+  if (!isPersistenceAvailable()) {
+    return;
+  }
+
   try {
     await apiUpdateChat(id, { title: description });
   } catch (error) {
     logger.error('Failed to update chat description', error);
-    throw error;
   }
 }
 
@@ -373,11 +392,14 @@ export async function updateChatMetadata(
   id: string,
   metadata: IChatMetadata | undefined,
 ): Promise<void> {
+  if (!isPersistenceAvailable()) {
+    return;
+  }
+
   try {
     await apiUpdateChat(id, { metadata: metadata as unknown as Record<string, unknown> });
   } catch (error) {
     logger.error('Failed to update chat metadata', error);
-    throw error;
   }
 }
 
