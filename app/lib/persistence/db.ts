@@ -169,23 +169,26 @@ export async function setMessages(
   }
 
   try {
-    // Try to get existing chat first
-    const existing = await apiGetChat(id);
+    // Always call createChat — the server uses upsert (ON CONFLICT DO UPDATE)
+    // so this is safe to call even if the chat already exists. This eliminates
+    // the race condition where multiple concurrent saves all see the chat as
+    // "not found" and try to create it simultaneously.
+    await apiCreateChat({
+      id,
+      title: description,
+      metadata: (metadata as unknown as Record<string, unknown>) || {},
+    });
 
-    if (existing) {
-      // Update existing chat
-      await apiUpdateChat(id, {
-        title: description,
-        metadata: metadata as unknown as Record<string, unknown>,
-      });
-    } else {
-      // Create new chat — pass the client-generated UUID so server uses it as PK.
-      // This keeps the client chatId nanostore, the URL, and the server record in sync.
-      await apiCreateChat({
-        id,
-        title: description,
-        metadata: (metadata as unknown as Record<string, unknown>) || {},
-      });
+    // If there are fields to update beyond what create/upsert handled, update them
+    if (description !== undefined || metadata !== undefined) {
+      try {
+        await apiUpdateChat(id, {
+          ...(description !== undefined ? { title: description } : {}),
+          ...(metadata !== undefined ? { metadata: metadata as unknown as Record<string, unknown> } : {}),
+        });
+      } catch {
+        // Update failures are non-critical if the chat was just created with these values
+      }
     }
 
     // Sync messages: replace all (idempotent — no duplicates on repeated saves)
