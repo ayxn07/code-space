@@ -1,4 +1,12 @@
-import type { ActionType, BoltAction, BoltActionData, FileAction, ShellAction, SupabaseAction } from '~/types/actions';
+import type {
+  ActionType,
+  BoltAction,
+  BoltActionData,
+  DiffAction,
+  FileAction,
+  ShellAction,
+  SupabaseAction,
+} from '~/types/actions';
 import type { BoltArtifactData } from '~/types/artifact';
 import { createScopedLogger } from '~/utils/logger';
 import { unreachable } from '~/utils/unreachable';
@@ -148,14 +156,16 @@ export class StreamingMessageParser {
 
             let content = currentAction.content.trim();
 
-            if ('type' in currentAction && currentAction.type === 'file') {
+            if ('type' in currentAction && (currentAction.type === 'file' || currentAction.type === 'diff')) {
               // Remove markdown code block syntax if present and file is not markdown
               if (!currentAction.filePath.endsWith('.md')) {
                 content = cleanoutMarkdownSyntax(content);
                 content = cleanEscapedTags(content);
               }
 
-              content += '\n';
+              if (currentAction.type === 'file') {
+                content += '\n';
+              }
             }
 
             currentAction.content = content;
@@ -365,14 +375,14 @@ export class StreamingMessageParser {
 
         (actionAttributes as SupabaseAction).filePath = filePath;
       }
-    } else if (actionType === 'file') {
+    } else if (actionType === 'file' || actionType === 'diff') {
       const filePath = this.#extractAttribute(actionTag, 'filePath') as string;
 
       if (!filePath) {
         logger.debug('File path not specified');
       }
 
-      (actionAttributes as FileAction).filePath = filePath;
+      (actionAttributes as FileAction | DiffAction).filePath = filePath;
     } else if (!['shell', 'start'].includes(actionType)) {
       logger.warn(`Unknown action type '${actionType}'`);
     }

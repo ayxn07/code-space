@@ -9,6 +9,103 @@ import type { BoltShell } from '~/utils/shell';
 
 const logger = createScopedLogger('ActionRunner');
 
+/*
+ * ---------------------------------------------------------------------------
+ * SEARCH/REPLACE diff engine
+ * ---------------------------------------------------------------------------
+ * Parses the content of a <boltAction type="diff"> block and applies each
+ * SEARCH/REPLACE pair to the original file content.
+ *
+ * Format:
+ *   <<<<<<< SEARCH
+ *   exact text to find (whitespace-sensitive)
+ *   =======
+ *   replacement text
+ *   >>>>>>> REPLACE
+ *
+ * Multiple blocks can appear in a single diff action. They are applied
+ * sequentially in the order they appear. If a SEARCH block is not found,
+ * a fuzzy match (ignoring leading whitespace) is attempted before failing.
+ */
+
+const SEARCH_MARKER = '<<<<<<< SEARCH';
+const SEPARATOR = '=======';
+const REPLACE_MARKER = '>>>>>>> REPLACE';
+
+function applySearchReplace(original: string, diffContent: string): string {
+  let result = original;
+  let pos = 0;
+
+  while (pos < diffContent.length) {
+    const searchStart = diffContent.indexOf(SEARCH_MARKER, pos);
+
+    if (searchStart === -1) {
+      break;
+    }
+
+    const separatorIdx = diffContent.indexOf(SEPARATOR, searchStart + SEARCH_MARKER.length);
+
+    if (separatorIdx === -1) {
+      logger.warn('Malformed diff: missing ======= separator');
+      break;
+    }
+
+    const replaceEnd = diffContent.indexOf(REPLACE_MARKER, separatorIdx + SEPARATOR.length);
+
+    if (replaceEnd === -1) {
+      logger.warn('Malformed diff: missing >>>>>>> REPLACE marker');
+      break;
+    }
+
+    // Extract search and replace content (skip the marker lines)
+    const searchText = diffContent.slice(searchStart + SEARCH_MARKER.length + 1, separatorIdx).trimEnd();
+    const replaceText = diffContent.slice(separatorIdx + SEPARATOR.length + 1, replaceEnd).trimEnd();
+
+    // Try exact match first
+    const exactIdx = result.indexOf(searchText);
+
+    if (exactIdx !== -1) {
+      result = result.slice(0, exactIdx) + replaceText + result.slice(exactIdx + searchText.length);
+    } else {
+      // Fuzzy match: normalize leading whitespace and try again
+      const searchLines = searchText.split('\n');
+      const resultLines = result.split('\n');
+
+      let matchStart = -1;
+      let matchLen = 0;
+
+      for (let i = 0; i <= resultLines.length - searchLines.length; i++) {
+        let matches = true;
+
+        for (let j = 0; j < searchLines.length; j++) {
+          if (resultLines[i + j].trimStart() !== searchLines[j].trimStart()) {
+            matches = false;
+            break;
+          }
+        }
+
+        if (matches) {
+          matchStart = i;
+          matchLen = searchLines.length;
+          break;
+        }
+      }
+
+      if (matchStart !== -1) {
+        const before = resultLines.slice(0, matchStart);
+        const after = resultLines.slice(matchStart + matchLen);
+        result = [...before, replaceText, ...after].join('\n');
+      } else {
+        logger.warn(`SEARCH block not found in file, skipping:\n${searchText.slice(0, 100)}...`);
+      }
+    }
+
+    pos = replaceEnd + REPLACE_MARKER.length;
+  }
+
+  return result;
+}
+
 export type ActionStatus = 'pending' | 'running' | 'complete' | 'aborted' | 'failed';
 
 export type BaseActionState = BoltAction & {
@@ -161,6 +258,10 @@ export class ActionRunner {
         }
         case 'file': {
           await this.#runFileAction(action);
+          break;
+        }
+        case 'diff': {
+          await this.#runDiffAction(action);
           break;
         }
         case 'supabase': {
@@ -335,6 +436,26 @@ export class ActionRunner {
       logger.debug(`File written ${relativePath}`);
     } catch (error) {
       logger.error('Failed to write file\n\n', error);
+    }
+  }
+
+  async #runDiffAction(action: ActionState) {
+    if (action.type !== 'diff') {
+      unreachable('Expected diff action');
+    }
+
+    const webcontainer = await this.#webcontainer;
+    const relativePath = nodePath.relative(webcontainer.workdir, action.filePath);
+
+    try {
+      const original = await webcontainer.fs.readFile(relativePath, 'utf-8');
+      const updated = applySearchReplace(original, action.content);
+
+      await webcontainer.fs.writeFile(relativePath, updated);
+      logger.debug(`Diff applied ${relativePath}`);
+    } catch (error) {
+      logger.error(`Failed to apply diff to ${relativePath}\n\n`, error);
+      throw error;
     }
   }
 

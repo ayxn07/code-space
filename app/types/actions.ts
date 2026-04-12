@@ -1,6 +1,6 @@
 import type { Change } from 'diff';
 
-export type ActionType = 'file' | 'shell' | 'supabase';
+export type ActionType = 'file' | 'diff' | 'shell' | 'supabase';
 
 export interface BaseAction {
   content: string;
@@ -8,6 +8,11 @@ export interface BaseAction {
 
 export interface FileAction extends BaseAction {
   type: 'file';
+  filePath: string;
+}
+
+export interface DiffAction extends BaseAction {
+  type: 'diff';
   filePath: string;
 }
 
@@ -30,7 +35,7 @@ export interface SupabaseAction extends BaseAction {
   projectId?: string;
 }
 
-export type BoltAction = FileAction | ShellAction | StartAction | BuildAction | SupabaseAction;
+export type BoltAction = FileAction | DiffAction | ShellAction | StartAction | BuildAction | SupabaseAction;
 
 export type BoltActionData = BoltAction | BaseAction;
 
