@@ -1,7 +1,7 @@
 import { useLoaderData, useNavigate, useSearchParams } from '@remix-run/react';
 import { useState, useEffect, useCallback } from 'react';
 import { atom } from 'nanostores';
-import { generateId, type JSONValue, type Message } from 'ai';
+import { type JSONValue, type Message } from 'ai';
 import { toast } from 'react-toastify';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { logStore } from '~/lib/stores/logs';
@@ -21,8 +21,6 @@ import { isPersistenceAvailable, waitForPersistence, apiUploadSnapshot, apiDownl
 import type { FileMap } from '~/lib/stores/files';
 import type { Snapshot } from './types';
 import { webcontainer } from '~/lib/webcontainer';
-import { detectProjectCommands, createCommandActionsString } from '~/utils/projectCommands';
-import type { ContextAnnotation } from '~/types/context';
 
 export interface ChatHistoryItem {
   id: string;
@@ -446,94 +444,26 @@ export function useChatHistory() {
 
         if (storedMessages && storedMessages.messages.length > 0) {
           // ─── Chat found with messages ───────────────────────────────
-          const validSnapshot = snapshot || { chatIndex: '', files: {} };
-          const summary = validSnapshot.summary;
 
           const rewindId = searchParams.get('rewindTo');
-          let startingIdx = -1;
           const endingIdx = rewindId
             ? storedMessages.messages.findIndex((m) => m.id === rewindId) + 1
             : storedMessages.messages.length;
-          const snapshotIndex = storedMessages.messages.findIndex((m) => m.id === validSnapshot.chatIndex);
 
-          if (snapshotIndex >= 0 && snapshotIndex < endingIdx) {
-            startingIdx = snapshotIndex;
-          }
+          const filteredMessages = storedMessages.messages.slice(0, endingIdx);
 
-          if (snapshotIndex > 0 && storedMessages.messages[snapshotIndex].id == rewindId) {
-            startingIdx = -1;
-          }
-
-          let filteredMessages = storedMessages.messages.slice(startingIdx + 1, endingIdx);
-          let archivedMsgs: Message[] = [];
-
-          if (startingIdx >= 0) {
-            archivedMsgs = storedMessages.messages.slice(0, startingIdx + 1);
-          }
-
-          setArchivedMessages(archivedMsgs);
-
-          if (startingIdx > 0) {
-            const files = Object.entries(validSnapshot?.files || {})
-              .map(([key, value]) => {
-                if (value?.type !== 'file') {
-                  return null;
-                }
-
-                return {
-                  content: value.content,
-                  path: key,
-                };
-              })
-              .filter((x): x is { content: string; path: string } => !!x);
-            const projectCommands = await detectProjectCommands(files);
-
-            const commandActionsString = createCommandActionsString(projectCommands);
-
-            filteredMessages = [
-              {
-                id: generateId(),
-                role: 'user',
-                content: `Restore project from snapshot`,
-                annotations: ['no-store', 'hidden'],
-              },
-              {
-                id: storedMessages.messages[snapshotIndex].id,
-                role: 'assistant',
-                content: `Hack Cortex restored your chat from a snapshot. You can revert this message to load the full chat history.
-                  <boltArtifact id="restored-project-setup" title="Restored Project & Setup" type="bundled">
-                  ${Object.entries(snapshot?.files || {})
-                    .map(([key, value]) => {
-                      if (value?.type === 'file') {
-                        return `
-                      <boltAction type="file" filePath="${key}">
-${value.content}
-                      </boltAction>
-                      `;
-                      } else {
-                        return ``;
-                      }
-                    })
-                    .join('\n')}
-                  ${commandActionsString} 
-                  </boltArtifact>
-                  `,
-                annotations: [
-                  'no-store',
-                  ...(summary
-                    ? [
-                        {
-                          chatId: storedMessages.messages[snapshotIndex].id,
-                          type: 'chatSummary',
-                          summary,
-                        } satisfies ContextAnnotation,
-                      ]
-                    : []),
-                ],
-              },
-              ...filteredMessages,
-            ];
-            restoreSnapshot(id);
+          /*
+           * If a snapshot exists, restore files directly to the WebContainer
+           * so they're ready before the message parser replays actions. This
+           * is faster than waiting for each <boltArtifact> file action.
+           *
+           * We intentionally show ALL messages (no archiving / synthetic
+           * "revert" messages) so the user always sees their full conversation.
+           * The setReloadedMessages() call in Chat.client.tsx marks these as
+           * already-loaded, which suppresses duplicate action alerts.
+           */
+          if (snapshot && Object.keys(snapshot.files || {}).length > 0) {
+            restoreSnapshot(id, snapshot);
           }
 
           setInitialMessages(filteredMessages);
