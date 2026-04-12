@@ -547,6 +547,27 @@ export class FilesStore {
     this.#modifiedFiles.clear();
   }
 
+  /**
+   * Clears all tracked files and resets the store to an empty state.
+   * Used when switching between chats to ensure workspace isolation.
+   * The file watcher will re-populate files from the WebContainer
+   * filesystem after this is called (if any files exist there).
+   */
+  clearAllFiles() {
+    this.files.set({});
+    this.#size = 0;
+    this.#modifiedFiles.clear();
+    this.#deletedPaths.clear();
+
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('bolt-deleted-paths');
+      }
+    } catch (error) {
+      logger.error('Failed to clear deleted paths from localStorage', error);
+    }
+  }
+
   async saveFile(filePath: string, content: string) {
     const webcontainer = await this.#webcontainer;
 

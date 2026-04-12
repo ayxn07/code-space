@@ -28,6 +28,7 @@ import type { ProgressAnnotation } from '~/types/context';
 import { SupabaseChatAlert } from '~/components/chat/SupabaseAlert';
 import { expoUrlAtom } from '~/lib/stores/qrCodeStore';
 import { useStore } from '@nanostores/react';
+import { workbenchStore } from '~/lib/stores/workbench';
 import { StickToBottom, useStickToBottomContext } from '~/lib/hooks';
 import { ChatBox } from './ChatBox';
 import type { DesignScheme } from '~/types/design-scheme';
@@ -146,6 +147,9 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [progressAnnotations, setProgressAnnotations] = useState<ProgressAnnotation[]>([]);
     const expoUrl = useStore(expoUrlAtom);
     const [qrModalOpen, setQrModalOpen] = useState(false);
+    const showWorkbench = useStore(workbenchStore.showWorkbench);
+    const filesCount = useStore(workbenchStore.files);
+    const hasFiles = Object.keys(filesCount).length > 0;
 
     useEffect(() => {
       if (expoUrl) {
@@ -426,6 +430,17 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   {llmErrorAlert && <LlmErrorAlert alert={llmErrorAlert} clearAlert={() => clearLlmErrorAlert?.()} />}
                 </div>
                 {progressAnnotations && <ProgressCompilation data={progressAnnotations} />}
+                {chatStarted && hasFiles && !showWorkbench && (
+                  <div className="flex justify-center mb-2">
+                    <button
+                      onClick={() => workbenchStore.showWorkbench.set(true)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-bolt-elements-bg-depth-3 text-bolt-elements-textSecondary hover:bg-bolt-elements-bg-depth-2 hover:text-bolt-elements-textPrimary border border-bolt-elements-borderColor transition-colors"
+                    >
+                      <span className="i-ph:code-bold h-4 w-4" />
+                      Show Workspace
+                    </button>
+                  </div>
+                )}
                 <ChatBox
                   isModelSettingsCollapsed={isModelSettingsCollapsed}
                   setIsModelSettingsCollapsed={setIsModelSettingsCollapsed}

@@ -3,6 +3,7 @@ import type { EditorDocument, ScrollPosition } from '~/components/editor/codemir
 import { ActionRunner } from '~/lib/runtime/action-runner';
 import type { ActionCallbackData, ArtifactCallbackData } from '~/lib/runtime/message-parser';
 import { webcontainer } from '~/lib/webcontainer';
+import { wipeWebContainerFiles } from '~/lib/webcontainer';
 import type { ITerminal } from '~/types/terminal';
 import { unreachable } from '~/utils/unreachable';
 import { EditorStore } from './editor';
@@ -57,6 +58,7 @@ export class WorkbenchStore {
   modifiedFiles = new Set<string>();
   artifactIdList: string[] = [];
   #globalExecutionQueue = Promise.resolve();
+  #wipePromise: Promise<void> = Promise.resolve();
   constructor() {
     if (import.meta.hot) {
       import.meta.hot.data.artifacts = this.artifacts;
@@ -463,12 +465,15 @@ export class WorkbenchStore {
 
   /**
    * Resets workbench state for a new/different chat.
-   * Clears artifacts, editor documents, and alerts so the new chat
-   * starts with a clean slate. The WebContainer filesystem is NOT
-   * wiped — snapshot restoration (if any) will overwrite the relevant
-   * files, and the file watcher will re-populate the FilesStore.
+   * Clears artifacts, editor documents, files, previews, and alerts so the
+   * new chat starts with a completely clean workspace.
+   *
+   * Also wipes the WebContainer filesystem to ensure no files from the
+   * previous chat leak into the new one. When loading an existing chat
+   * its snapshot will be written to the freshly wiped filesystem.
    */
-  resetForNewChat() {
+  async resetForNewChat() {
+    // 1. Clear in-memory state synchronously
     this.artifacts.set({});
     this.artifactIdList = [];
     this.#reloadedMessages.clear();
@@ -482,6 +487,30 @@ export class WorkbenchStore {
     this.setSelectedFile(undefined);
     this.#editorStore.documents.set({});
     this.resetAllFileModifications();
+
+    // 2. Clear the FilesStore so stale files don't show in the UI
+    this.#filesStore.clearAllFiles();
+
+    // 3. Clear previews (running dev servers will be cleaned by WebContainer wipe)
+    this.#previewsStore.previews.set([]);
+
+    /*
+     * 4. Wipe the WebContainer filesystem (async, but we don't block the UI on it).
+     *    The file watcher will fire remove events which will keep FilesStore in sync.
+     */
+    this.#wipePromise = wipeWebContainerFiles().catch((err) => {
+      console.error('[WorkbenchStore] Failed to wipe WebContainer files:', err);
+    });
+  }
+
+  /**
+   * Returns a promise that resolves when the current WebContainer filesystem
+   * wipe (triggered by resetForNewChat) has completed. Callers that need to
+   * write to the filesystem (e.g. restoreSnapshot) should await this first
+   * to avoid race conditions.
+   */
+  get wipeComplete(): Promise<void> {
+    return this.#wipePromise;
   }
 
   setReloadedMessages(messages: string[]) {

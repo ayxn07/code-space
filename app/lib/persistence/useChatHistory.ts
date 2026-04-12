@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { atom } from 'nanostores';
 import { type JSONValue, type Message } from 'ai';
 import { toast } from 'react-toastify';
+import { resetMessageParser } from '~/lib/hooks/useMessageParser';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { logStore } from '~/lib/stores/logs';
 import {
@@ -21,6 +22,7 @@ import { isPersistenceAvailable, waitForPersistence, apiUploadSnapshot, apiDownl
 import type { FileMap } from '~/lib/stores/files';
 import type { Snapshot } from './types';
 import { webcontainer } from '~/lib/webcontainer';
+import { MODEL_REGEX, PROVIDER_REGEX } from '~/utils/constants';
 
 export interface ChatHistoryItem {
   id: string;
@@ -379,6 +381,12 @@ export function useChatHistory() {
      */
     workbenchStore.resetForNewChat();
 
+    /*
+     * Reset the global message parser so artifact/action counters and
+     * processed-block tracking don't carry over between chats.
+     */
+    resetMessageParser();
+
     if (mixedId) {
       /*
        * ---------------------------------------------------------------------------
@@ -470,6 +478,7 @@ export function useChatHistory() {
            */
           if (snapshot && Object.keys(snapshot.files || {}).length > 0) {
             restoreSnapshot(id, snapshot);
+            workbenchStore.showWorkbench.set(true);
           }
 
           setInitialMessages(filteredMessages);
@@ -554,6 +563,12 @@ export function useChatHistory() {
   );
 
   const restoreSnapshot = useCallback(async (id: string, snapshot?: Snapshot) => {
+    /*
+     * Wait for any in-progress WebContainer filesystem wipe to complete
+     * before writing snapshot files, to avoid race conditions.
+     */
+    await workbenchStore.wipeComplete;
+
     const container = await webcontainer;
 
     const validSnapshot = snapshot || { chatIndex: '', files: {} };
@@ -562,7 +577,10 @@ export function useChatHistory() {
       return;
     }
 
-    Object.entries(validSnapshot.files).forEach(async ([key, value]) => {
+    // First pass: create all directories (must be sequential to ensure parents exist)
+    for (const [rawKey, value] of Object.entries(validSnapshot.files)) {
+      let key = rawKey;
+
       if (key.startsWith(container.workdir)) {
         key = key.replace(container.workdir, '');
       }
@@ -570,16 +588,20 @@ export function useChatHistory() {
       if (value?.type === 'folder') {
         await container.fs.mkdir(key, { recursive: true });
       }
-    });
-    Object.entries(validSnapshot.files).forEach(async ([key, value]) => {
+    }
+
+    // Second pass: write all files
+    for (const [rawKey, value] of Object.entries(validSnapshot.files)) {
       if (value?.type === 'file') {
+        let key = rawKey;
+
         if (key.startsWith(container.workdir)) {
           key = key.replace(container.workdir, '');
         }
 
         await container.fs.writeFile(key, value.content, { encoding: value.isBinary ? undefined : 'utf8' });
       }
-    });
+    }
   }, []);
 
   return {
@@ -648,17 +670,19 @@ export function useChatHistory() {
       if (!description.get()) {
         /*
          * Generate a meaningful chat title from the user's first message.
-         * Falls back to the first artifact title if no user message exists.
+         * Strip [Model: ...] and [Provider: ...] metadata that gets
+         * prepended to user messages before extracting the title.
          */
         const firstUserMessage = messages.find((m) => m.role === 'user');
-        const userText = firstUserMessage
+        let userText = firstUserMessage
           ? (Array.isArray(firstUserMessage.content)
               ? (firstUserMessage.content.find((p: any) => p.type === 'text') as any)?.text
               : firstUserMessage.content) || ''
           : '';
 
+        userText = userText.replace(MODEL_REGEX, '').replace(PROVIDER_REGEX, '').trim();
+
         if (userText) {
-          /* Truncate to a reasonable title length */
           const title = userText.length > 60 ? userText.slice(0, 57) + '...' : userText;
           description.set(title);
         } else if (firstArtifact?.title) {

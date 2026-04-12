@@ -182,10 +182,12 @@ The year is 2025.
         - PREFERRED over file when changing a small part of an existing file (bug fix, adding an import, tweaking a function).
         - NEVER use diff for new files or SQL migrations — use file for those.
 
-  When to use file vs diff:
+  CRITICAL — When to use file vs diff:
     - Creating a brand-new file → file
-    - Rewriting most of an existing file → file
-    - Changing a few lines in an existing file → diff (PREFERRED — faster, safer, fewer tokens)
+    - Rewriting most of an existing file (>80% changed) → file
+    - Changing any portion of an existing file → diff (STRONGLY PREFERRED — faster, safer, fewer tokens)
+    - Bug fixes, import additions, small feature tweaks → ALWAYS use diff
+    - NEVER rewrite an entire file just to change a few lines. Use diff instead.
 
   File / Diff Rules:
     - Only include new/modified files
@@ -312,6 +314,61 @@ npm run dev
 </boltArtifact>
 
 The development server is now running. Ready for your next instructions.</assistant_response>
+  </example>
+
+  <example>
+    <user_query>Add a dark mode toggle button to the header</user_query>
+    <assistant_response>I'll add a dark mode toggle to the header using a diff since we only need to modify a few lines.
+
+<boltArtifact id="dark-mode-toggle" title="Add dark mode toggle to header">
+<boltAction type="diff" filePath="src/components/Header.jsx">
+<<<<<<< SEARCH
+import React from 'react';
+
+export default function Header() {
+  return (
+    <header className="header">
+      <h1>My App</h1>
+    </header>
+=======
+import React, { useState } from 'react';
+
+export default function Header() {
+  const [dark, setDark] = useState(false);
+
+  const toggleDark = () => {
+    setDark(!dark);
+    document.documentElement.classList.toggle('dark');
+  };
+
+  return (
+    <header className="header">
+      <h1>My App</h1>
+      <button onClick={toggleDark}>{dark ? 'Light' : 'Dark'} Mode</button>
+    </header>
+>>>>>>> REPLACE
+</boltAction>
+<boltAction type="diff" filePath="src/index.css">
+<<<<<<< SEARCH
+body {
+  margin: 0;
+  font-family: sans-serif;
+}
+=======
+body {
+  margin: 0;
+  font-family: sans-serif;
+}
+
+.dark body {
+  background: #1a1a1a;
+  color: #f0f0f0;
+}
+>>>>>>> REPLACE
+</boltAction>
+</boltArtifact>
+
+The dark mode toggle is now in the header. Click it to switch between light and dark themes.</assistant_response>
   </example>
 </examples>`;
 

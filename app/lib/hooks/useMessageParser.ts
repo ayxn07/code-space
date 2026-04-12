@@ -52,6 +52,15 @@ const extractTextContent = (message: Message) =>
     ? (message.content.find((item) => item.type === 'text')?.text as string) || ''
     : message.content;
 
+/**
+ * Resets the global message parser state.
+ * Must be called when switching between chats so that artifact/action
+ * counters and processed-block tracking don't carry over.
+ */
+export function resetMessageParser() {
+  messageParser.reset();
+}
+
 export function useMessageParser() {
   const [parsedMessages, setParsedMessages] = useState<{ [key: number]: string }>({});
 
