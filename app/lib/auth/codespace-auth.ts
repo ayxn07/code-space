@@ -77,8 +77,13 @@ export function getTokenFromCookie(cookieHeader: string | null): string | null {
  * Creates a Set-Cookie header value for the codespace auth token.
  */
 export function makeAuthCookie(token: string, maxAgeSec = 86400): string {
-  // SameSite=None + Secure required for cross-origin iframe cookies
-  return `${COOKIE_NAME}=${token}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${maxAgeSec}`;
+  /*
+   * SameSite=None + Secure required for cross-origin iframe cookies.
+   * NOT HttpOnly — the client-side inline script in root.tsx must read this
+   * cookie via document.cookie on page reload (when ?token= is absent) to
+   * populate window.__CODESPACE_TOKEN__ and seed the nanostores.
+   */
+  return `${COOKIE_NAME}=${token}; Path=/; Secure; SameSite=None; Max-Age=${maxAgeSec}`;
 }
 
 /**

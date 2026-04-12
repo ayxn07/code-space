@@ -120,7 +120,7 @@ export const onRequest: PagesFunction = async (context) => {
     const response = unauthorizedResponse();
     response.headers.append(
       'Set-Cookie',
-      `${COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0`,
+      `${COOKIE_NAME}=; Path=/; Secure; SameSite=None; Max-Age=0`,
     );
 
     return response;
