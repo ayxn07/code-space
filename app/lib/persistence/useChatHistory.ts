@@ -209,7 +209,16 @@ export function useChatHistory() {
   const [ready, setReady] = useState<boolean>(false);
   const [urlId, setUrlId] = useState<string | undefined>();
 
+  // Stable key that only increments on route-level chat switches (when the
+  // effect fires due to mixedId changing). This is used as the React key for
+  // ChatImpl instead of chatId, so that assigning a new chatId during the
+  // first message save does NOT cause a destructive remount.
+  const [sessionKey, setSessionKey] = useState(0);
+
   useEffect(() => {
+    // Increment session key so ChatImpl remounts with fresh useChat state
+    setSessionKey((prev) => prev + 1);
+
     // Reset save state when switching chats
     resetSaveState();
 
@@ -464,6 +473,7 @@ ${value.content}
   return {
     ready: !mixedId || ready,
     initialMessages,
+    sessionKey,
     updateChatMestaData: async (metadata: IChatMetadata) => {
       const id = chatId.get();
 

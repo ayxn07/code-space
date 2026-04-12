@@ -5,7 +5,7 @@ import { useAnimate } from 'framer-motion';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { useMessageParser, usePromptEnhancer, useShortcuts } from '~/lib/hooks';
-import { chatId as chatIdAtom, description, useChatHistory } from '~/lib/persistence';
+import { description, useChatHistory } from '~/lib/persistence';
 import { chatStore } from '~/lib/stores/chat';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, PROMPT_COOKIE_KEY, PROVIDER_LIST } from '~/utils/constants';
@@ -34,9 +34,8 @@ const logger = createScopedLogger('Chat');
 export function Chat() {
   renderLogger.trace('Chat');
 
-  const { ready, initialMessages, storeMessageHistory, importChat, exportChat } = useChatHistory();
+  const { ready, initialMessages, storeMessageHistory, importChat, exportChat, sessionKey } = useChatHistory();
   const title = useStore(description);
-  const currentChatId = useStore(chatIdAtom);
   useEffect(() => {
     workbenchStore.setReloadedMessages(initialMessages.map((m) => m.id));
   }, [initialMessages]);
@@ -45,7 +44,7 @@ export function Chat() {
     <>
       {ready && (
         <ChatImpl
-          key={currentChatId || 'new'}
+          key={sessionKey}
           description={title}
           initialMessages={initialMessages}
           exportChat={exportChat}
