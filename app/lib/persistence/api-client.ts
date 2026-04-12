@@ -351,3 +351,177 @@ export async function apiReplaceMessages(
     throw error;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Snapshot persistence (Supabase Storage via HackCortex API)
+// ---------------------------------------------------------------------------
+
+/**
+ * Compresses a string using gzip via the browser's CompressionStream API.
+ * Falls back to sending uncompressed JSON if CompressionStream is unavailable.
+ */
+async function gzipCompress(data: string): Promise<{ bytes: Uint8Array; compressed: boolean }> {
+  if (typeof CompressionStream === 'undefined') {
+    // Fallback: send raw JSON bytes (server accepts application/octet-stream too)
+    return { bytes: new TextEncoder().encode(data), compressed: false };
+  }
+
+  const stream = new Blob([data]).stream().pipeThrough(new CompressionStream('gzip'));
+  const chunks: Uint8Array[] = [];
+  const reader = stream.getReader();
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    chunks.push(value);
+  }
+
+  // Concatenate chunks into a single Uint8Array
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return { bytes: result, compressed: true };
+}
+
+/**
+ * Decompresses gzip data using the browser's DecompressionStream API.
+ * Falls back to treating input as raw JSON if DecompressionStream is unavailable.
+ */
+async function gzipDecompress(data: ArrayBuffer): Promise<string> {
+  if (typeof DecompressionStream === 'undefined') {
+    // Fallback: assume raw JSON
+    return new TextDecoder().decode(data);
+  }
+
+  try {
+    const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('gzip'));
+    const reader = stream.getReader();
+    const chunks: Uint8Array[] = [];
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) {
+        break;
+      }
+
+      chunks.push(value);
+    }
+
+    const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+
+    for (const chunk of chunks) {
+      result.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    return new TextDecoder().decode(result);
+  } catch {
+    // If decompression fails, try treating as raw JSON
+    return new TextDecoder().decode(data);
+  }
+}
+
+/**
+ * Uploads a snapshot (gzip-compressed JSON) to the server.
+ * The snapshot replaces any existing snapshot for this chat.
+ */
+export async function apiUploadSnapshot(
+  chatId: string,
+  snapshot: { chatIndex: string; files: Record<string, unknown>; summary?: string },
+): Promise<void> {
+  const baseUrl = getBaseUrl();
+
+  if (!baseUrl) {
+    throw new ApiNotConfiguredError();
+  }
+
+  const token = getToken();
+
+  if (!token) {
+    throw new Error('[codespace-api] No auth token available.');
+  }
+
+  const json = JSON.stringify(snapshot);
+  const { bytes, compressed } = await gzipCompress(json);
+
+  const res = await fetch(`${baseUrl}/api/codespace/chats/${chatId}/snapshot`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': compressed ? 'application/gzip' : 'application/octet-stream',
+      Authorization: `Bearer ${token}`,
+    },
+    body: bytes as unknown as BodyInit,
+  });
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || `Snapshot upload failed: ${res.status} ${res.statusText}`);
+  }
+}
+
+/**
+ * Downloads a snapshot from the server.
+ * Returns the parsed snapshot object, or null if no snapshot exists.
+ */
+export async function apiDownloadSnapshot(
+  chatId: string,
+): Promise<{ chatIndex: string; files: Record<string, unknown>; summary?: string } | null> {
+  const baseUrl = getBaseUrl();
+
+  if (!baseUrl) {
+    return null; // No persistence configured — no snapshot to download
+  }
+
+  const token = getToken();
+
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const res = await fetch(`${baseUrl}/api/codespace/chats/${chatId}/snapshot`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (res.status === 404) {
+      return null; // No snapshot stored yet — not an error
+    }
+
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error || `Snapshot download failed: ${res.status}`);
+    }
+
+    const arrayBuffer = await res.arrayBuffer();
+    const json = await gzipDecompress(arrayBuffer);
+
+    return JSON.parse(json);
+  } catch (error) {
+    if (error instanceof ApiNotConfiguredError) {
+      return null;
+    }
+
+    console.error('[codespace-api] Failed to download snapshot:', error);
+
+    // Don't throw — snapshot download failure is non-critical
+    return null;
+  }
+}

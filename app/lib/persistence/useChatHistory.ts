@@ -17,7 +17,7 @@ import {
   setSnapshot,
   type IChatMetadata,
 } from './db';
-import { isPersistenceAvailable, waitForPersistence } from './api-client';
+import { isPersistenceAvailable, waitForPersistence, apiUploadSnapshot, apiDownloadSnapshot } from './api-client';
 import type { FileMap } from '~/lib/stores/files';
 import type { Snapshot } from './types';
 import { webcontainer } from '~/lib/webcontainer';
@@ -178,6 +178,9 @@ function resetSaveState(): void {
   }
 
   _pendingSave = null;
+
+  // Also reset snapshot upload state
+  resetSnapshotUploadState();
 }
 
 // Register beforeunload handler to flush unsaved changes when the tab closes
@@ -190,6 +193,7 @@ if (typeof window !== 'undefined') {
         // Trigger immediate flush — can't truly await in beforeunload,
         // but starting the promise helps if the browser gives us time
         flushSave();
+        flushSnapshotUpload();
       } catch {
         // Best effort
       }
@@ -198,6 +202,106 @@ if (typeof window !== 'undefined') {
       event.preventDefault();
     }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Snapshot upload infrastructure — debounced, separate from message saves
+// ---------------------------------------------------------------------------
+// Snapshots are larger than messages, so we use a longer debounce (5s).
+// The snapshot is first saved to IndexedDB (immediate, same as before),
+// then uploaded to the server in the background.
+// ---------------------------------------------------------------------------
+
+const SNAPSHOT_UPLOAD_DEBOUNCE_MS = 5000; // 5 seconds after last snapshot change
+const SNAPSHOT_MAX_RETRIES = 2;
+const SNAPSHOT_RETRY_DELAY_MS = 2000;
+
+let _snapshotUploadTimerId: ReturnType<typeof setTimeout> | null = null;
+
+interface PendingSnapshotUpload {
+  chatId: string;
+  snapshot: Snapshot;
+}
+let _pendingSnapshotUpload: PendingSnapshotUpload | null = null;
+
+/**
+ * Performs the actual snapshot upload with retry logic.
+ */
+async function executeSnapshotUpload(upload: PendingSnapshotUpload): Promise<boolean> {
+  for (let attempt = 0; attempt < SNAPSHOT_MAX_RETRIES; attempt++) {
+    try {
+      await apiUploadSnapshot(upload.chatId, upload.snapshot as any);
+      return true;
+    } catch (error) {
+      const delay = SNAPSHOT_RETRY_DELAY_MS * Math.pow(2, attempt);
+      console.warn(
+        `[snapshot-upload] Attempt ${attempt + 1}/${SNAPSHOT_MAX_RETRIES} failed, retrying in ${delay}ms...`,
+        error,
+      );
+
+      if (attempt < SNAPSHOT_MAX_RETRIES - 1) {
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+
+  console.error('[snapshot-upload] All retry attempts exhausted. Snapshot not uploaded (local copy in IndexedDB is still available).');
+
+  return false;
+}
+
+/**
+ * Schedules a debounced snapshot upload to the server.
+ */
+function scheduleSnapshotUpload(chatId: string, snapshot: Snapshot): void {
+  if (!isPersistenceAvailable()) {
+    return;
+  }
+
+  _pendingSnapshotUpload = { chatId, snapshot };
+
+  if (_snapshotUploadTimerId !== null) {
+    clearTimeout(_snapshotUploadTimerId);
+  }
+
+  _snapshotUploadTimerId = setTimeout(() => {
+    _snapshotUploadTimerId = null;
+    const upload = _pendingSnapshotUpload;
+
+    if (upload) {
+      _pendingSnapshotUpload = null;
+      executeSnapshotUpload(upload).catch((err) => console.error('[snapshot-upload] Unexpected error:', err));
+    }
+  }, SNAPSHOT_UPLOAD_DEBOUNCE_MS);
+}
+
+/**
+ * Immediately flushes any pending snapshot upload.
+ */
+async function flushSnapshotUpload(): Promise<void> {
+  if (_snapshotUploadTimerId !== null) {
+    clearTimeout(_snapshotUploadTimerId);
+    _snapshotUploadTimerId = null;
+  }
+
+  const upload = _pendingSnapshotUpload;
+
+  if (upload) {
+    _pendingSnapshotUpload = null;
+    await executeSnapshotUpload(upload);
+  }
+}
+
+/**
+ * Resets snapshot upload state for a new chat session.
+ */
+function resetSnapshotUploadState(): void {
+  if (_snapshotUploadTimerId !== null) {
+    clearTimeout(_snapshotUploadTimerId);
+    _snapshotUploadTimerId = null;
+  }
+
+  _pendingSnapshotUpload = null;
 }
 
 export function useChatHistory() {
@@ -270,10 +374,34 @@ export function useChatHistory() {
         }
 
         // Fetch chat + messages from API, and snapshot from IndexedDB (if available)
-        const [storedMessages, snapshot] = await Promise.all([
+        const [storedMessages, localSnapshot] = await Promise.all([
           getMessages(db as IDBDatabase, id),
           db ? getSnapshot(db, id).catch(() => undefined) : Promise.resolve(undefined),
         ]);
+
+        // If no local snapshot, try to download from server (cross-device sync)
+        let snapshot = localSnapshot;
+
+        if (!snapshot) {
+          try {
+            const serverSnapshot = await apiDownloadSnapshot(id);
+
+            if (serverSnapshot) {
+              snapshot = serverSnapshot as Snapshot;
+
+              // Cache in IndexedDB for future loads
+              if (db) {
+                setSnapshot(db, id, snapshot).catch((err) =>
+                  console.error('Failed to cache server snapshot to IndexedDB:', err),
+                );
+              }
+            }
+          } catch (error) {
+            console.warn('[useChatHistory] Failed to download snapshot from server:', error);
+
+            // Non-critical — continue without snapshot
+          }
+        }
 
         if (storedMessages && storedMessages.messages.length > 0) {
           // ─── Chat found with messages ───────────────────────────────
@@ -420,8 +548,7 @@ ${value.content}
     async (chatIdx: string, files: FileMap, _chatId?: string | undefined, chatSummary?: string) => {
       const id = chatId.get();
 
-      if (!id || !db) {
-        // Snapshots require IndexedDB — gracefully skip if unavailable
+      if (!id) {
         return;
       }
 
@@ -431,13 +558,17 @@ ${value.content}
         summary: chatSummary,
       };
 
-      try {
-        await setSnapshot(db, id, snapshot);
-      } catch (error) {
-        console.error('Failed to save snapshot:', error);
-
-        // Don't toast — snapshot failure is non-critical
+      // 1. Save to IndexedDB (immediate, local)
+      if (db) {
+        try {
+          await setSnapshot(db, id, snapshot);
+        } catch (error) {
+          console.error('Failed to save snapshot to IndexedDB:', error);
+        }
       }
+
+      // 2. Schedule upload to server (debounced, background)
+      scheduleSnapshotUpload(id, snapshot);
     },
     [],
   );
