@@ -106,6 +106,7 @@ async function executeSave(save: PendingSave): Promise<boolean> {
   }
 
   console.error('[auto-save] All retry attempts exhausted. Changes may be lost.');
+  toast.error('Failed to save chat. Your changes may be lost.');
   return false;
 }
 

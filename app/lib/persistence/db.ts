@@ -194,9 +194,8 @@ export async function setMessages(
       await apiReplaceMessages(id, apiMessages);
     }
   } catch (error) {
-    // Log but do NOT re-throw — persistence errors should not
-    // break the chat experience or trigger toast errors
     logger.error(`Failed to save chat ${id} (${messages.length} messages) to API`, error);
+    throw error; // Re-throw so executeSave() can detect failure and retry
   }
 }
 
