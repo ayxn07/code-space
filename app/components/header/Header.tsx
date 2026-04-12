@@ -16,7 +16,7 @@ export function Header() {
         'border-bolt-elements-borderColor': chat.started,
       })}
     >
-      <div className="flex items-center gap-2 z-logo text-bolt-elements-textPrimary cursor-pointer">
+      <div className="flex-1 flex items-center gap-2 z-logo text-bolt-elements-textPrimary cursor-pointer">
         <div className="i-ph:sidebar-simple-duotone text-xl" />
         <a href="/" className="flex items-center gap-1.5">
           <HackCortexLogo size={28} />
@@ -30,7 +30,7 @@ export function Header() {
           </span>
           <ClientOnly>
             {() => (
-              <div className="">
+              <div className="flex-1 flex justify-end">
                 <HeaderActionButtons chatStarted={chat.started} />
               </div>
             )}

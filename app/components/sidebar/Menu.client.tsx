@@ -404,24 +404,21 @@ export const Menu = () => {
         )}
       >
         <div className="h-12 flex items-center justify-between px-4 border-b border-bolt-elements-sidebar-border bg-bolt-elements-sidebar-headerBg rounded-tr-2xl">
-          <div className="text-bolt-elements-textPrimary font-medium"></div>
-          <div className="flex items-center gap-3">
-            <span className="font-medium text-sm text-bolt-elements-textPrimary truncate">
-              {profile?.username || 'Guest User'}
-            </span>
-            <div className="flex items-center justify-center w-[32px] h-[32px] overflow-hidden bg-bolt-elements-bg-depth-3 text-bolt-elements-textSecondary rounded-full shrink-0">
-              {profile?.avatar ? (
-                <img
-                  src={profile.avatar}
-                  alt={profile?.username || 'User'}
-                  className="w-full h-full object-cover"
-                  loading="eager"
-                  decoding="sync"
-                />
-              ) : (
-                <div className="i-ph:user-fill text-lg" />
-              )}
-            </div>
+          <span className="font-medium text-sm text-bolt-elements-textPrimary truncate">
+            {profile?.username || 'Guest User'}
+          </span>
+          <div className="flex items-center justify-center w-[32px] h-[32px] overflow-hidden bg-bolt-elements-bg-depth-3 text-bolt-elements-textSecondary rounded-full shrink-0">
+            {profile?.avatar ? (
+              <img
+                src={profile.avatar}
+                alt={profile?.username || 'User'}
+                className="w-full h-full object-cover"
+                loading="eager"
+                decoding="sync"
+              />
+            ) : (
+              <div className="i-ph:user-fill text-lg" />
+            )}
           </div>
         </div>
         <CurrentDateTime />
