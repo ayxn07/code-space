@@ -76,7 +76,7 @@ export function getTokenFromCookie(cookieHeader: string | null): string | null {
 /**
  * Creates a Set-Cookie header value for the codespace auth token.
  */
-export function makeAuthCookie(token: string, maxAgeSec = 3600): string {
+export function makeAuthCookie(token: string, maxAgeSec = 86400): string {
   // SameSite=None + Secure required for cross-origin iframe cookies
   return `${COOKIE_NAME}=${token}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${maxAgeSec}`;
 }

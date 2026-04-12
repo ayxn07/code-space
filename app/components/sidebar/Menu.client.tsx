@@ -1,12 +1,21 @@
 import { motion, type Variants } from 'framer-motion';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
+import { useNavigate, useLocation } from '@remix-run/react';
 import { Dialog, DialogButton, DialogDescription, DialogRoot, DialogTitle } from '~/components/ui/Dialog';
 import { ThemeSwitch } from '~/components/ui/ThemeSwitch';
 import { ControlPanel } from '~/components/@settings/core/ControlPanel';
 import { SettingsButton } from '~/components/ui/SettingsButton';
 import { Button } from '~/components/ui/Button';
-import { db, deleteById, getAll, chatId, type ChatHistoryItem, useChatHistory } from '~/lib/persistence';
+import {
+  db,
+  deleteById,
+  getAll,
+  chatId,
+  type ChatHistoryItem,
+  useChatHistory,
+  chatResetSignal,
+} from '~/lib/persistence';
 import { waitForPersistence } from '~/lib/persistence/api-client';
 import { cubicEasingFn } from '~/utils/easings';
 import { HistoryItem } from './HistoryItem';
@@ -67,11 +76,15 @@ function CurrentDateTime() {
 
 export const Menu = () => {
   const { duplicateCurrentChat, exportChat } = useChatHistory();
+  const navigate = useNavigate();
+  const location = useLocation();
   const menuRef = useRef<HTMLDivElement>(null);
   const [list, setList] = useState<ChatHistoryItem[]>([]);
   const [open, setOpen] = useState(false);
   const [dialogContent, setDialogContent] = useState<DialogContent>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const profile = useStore(profileStore);
   const apiBaseUrl = useStore(codespaceApiBaseUrl);
   const csProfile = useStore(codespaceProfile);
@@ -82,12 +95,37 @@ export const Menu = () => {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
+  /**
+   * Navigate to a fresh "new chat" state without a full page reload.
+   * - If Remix route is /chat/:id → use Remix navigate (route change triggers reset)
+   * - If Remix route is / (URL may have been changed by replaceState) → signal reset
+   */
+  const goToNewChat = useCallback(() => {
+    setOpen(false);
+
+    if (location.pathname === '/') {
+      // Remix thinks we're on / — URL may have been changed by replaceState
+      if (window.location.pathname !== '/') {
+        window.history.replaceState({}, '', '/');
+      }
+
+      // Signal useChatHistory to re-run its init effect
+      chatResetSignal.set(chatResetSignal.get() + 1);
+    } else {
+      // Proper Remix navigation — route change triggers the effect naturally
+      navigate('/');
+    }
+  }, [location.pathname, navigate]);
+
   const { filteredItems: filteredList, handleSearchChange } = useSearchFilter({
     items: list,
     searchFields: ['description'],
   });
 
   const loadEntries = useCallback(() => {
+    setIsLoading(true);
+    setLoadError(null);
+
     /*
      * Wait for persistence API (token + base URL) to become available
      * before fetching chats. On hard navigation these are set asynchronously
@@ -97,6 +135,8 @@ export const Menu = () => {
       .then((available) => {
         if (!available) {
           console.warn('[Menu] Persistence not available — cannot load chat list.');
+          setLoadError('Unable to connect to server');
+
           return [];
         }
 
@@ -114,7 +154,11 @@ export const Menu = () => {
         })),
       )
       .then(setList)
-      .catch((error) => toast.error(error.message));
+      .catch((error) => {
+        setLoadError(error.message || 'Failed to load chats');
+        toast.error(error.message);
+      })
+      .finally(() => setIsLoading(false));
   }, []);
 
   const deleteChat = useCallback(async (id: string): Promise<void> => {
@@ -151,9 +195,9 @@ export const Menu = () => {
           loadEntries();
 
           if (chatId.get() === item.id) {
-            // hard page navigation to clear the stores
+            // Navigate to new chat after deleting the current one
             console.log('Navigating away from deleted chat');
-            window.location.pathname = '/';
+            goToNewChat();
           }
         })
         .catch((error) => {
@@ -167,7 +211,7 @@ export const Menu = () => {
           loadEntries();
         });
     },
-    [loadEntries, deleteChat],
+    [loadEntries, deleteChat, goToNewChat],
   );
 
   const deleteSelectedItems = useCallback(
@@ -218,10 +262,10 @@ export const Menu = () => {
       // Navigate if needed
       if (shouldNavigate) {
         console.log('Navigating away from deleted chat');
-        window.location.pathname = '/';
+        goToNewChat();
       }
     },
-    [deleteChat, loadEntries],
+    [deleteChat, loadEntries, goToNewChat],
   );
 
   const closeDialog = () => {
@@ -385,13 +429,7 @@ export const Menu = () => {
           <div className="p-4 space-y-3">
             <div className="flex gap-2">
               <button
-                onClick={() => {
-                  /*
-                   * Hard navigation to fully reset all state (atoms, chatStore, memo'd components).
-                   * <Link to="/"> is a no-op when already on "/" and doesn't reset global state.
-                   */
-                  window.location.pathname = '/';
-                }}
+                onClick={goToNewChat}
                 className="flex-1 flex gap-2 items-center bg-bolt-elements-sidebar-buttonBackgroundDefault text-bolt-elements-sidebar-buttonText hover:bg-bolt-elements-sidebar-buttonBackgroundHover rounded-lg px-4 py-2 transition-colors"
               >
                 <span className="inline-block i-ph:plus-circle h-4 w-4" />
@@ -442,115 +480,137 @@ export const Menu = () => {
             )}
           </div>
           <div className="flex-1 overflow-auto px-3 pb-3">
-            {filteredList.length === 0 && (
+            {isLoading && (
+              <div className="flex items-center justify-center py-8">
+                <div className="i-ph:spinner-gap animate-spin h-5 w-5 text-bolt-elements-textTertiary" />
+                <span className="ml-2 text-sm text-bolt-elements-textTertiary">Loading chats...</span>
+              </div>
+            )}
+            {!isLoading && loadError && (
+              <div className="px-4 py-6 text-center">
+                <div className="i-ph:warning-circle h-6 w-6 mx-auto text-bolt-elements-icon-error mb-2" />
+                <p className="text-sm text-bolt-elements-textSecondary mb-3">{loadError}</p>
+                <button onClick={loadEntries} className="text-sm text-accent-500 hover:text-accent-600 underline">
+                  Retry
+                </button>
+              </div>
+            )}
+            {!isLoading && !loadError && filteredList.length === 0 && (
               <div className="px-4 text-bolt-elements-textTertiary text-sm">
                 {list.length === 0 ? 'No previous conversations' : 'No matches found'}
               </div>
             )}
-            <DialogRoot open={dialogContent !== null}>
-              {binDates(filteredList).map(({ category, items }) => (
-                <div key={category} className="mt-2 first:mt-0 space-y-1">
-                  <div className="text-xs font-medium text-bolt-elements-textTertiary sticky top-0 z-1 bg-bolt-elements-sidebar-background px-4 py-1">
-                    {category}
+            {!isLoading && !loadError && filteredList.length > 0 && (
+              <DialogRoot open={dialogContent !== null}>
+                {binDates(filteredList).map(({ category, items }) => (
+                  <div key={category} className="mt-2 first:mt-0 space-y-1">
+                    <div className="text-xs font-medium text-bolt-elements-textTertiary sticky top-0 z-1 bg-bolt-elements-sidebar-background px-4 py-1">
+                      {category}
+                    </div>
+                    <div className="space-y-0.5 pr-1">
+                      {items.map((item) => (
+                        <HistoryItem
+                          key={item.id}
+                          item={item}
+                          exportChat={exportChat}
+                          onDelete={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            console.log('Delete triggered for item:', item);
+                            setDialogContentWithLogging({ type: 'delete', item });
+                          }}
+                          onDuplicate={() => handleDuplicate(item.id)}
+                          selectionMode={selectionMode}
+                          isSelected={selectedItems.includes(item.id)}
+                          onToggleSelection={toggleItemSelection}
+                        />
+                      ))}
+                    </div>
                   </div>
-                  <div className="space-y-0.5 pr-1">
-                    {items.map((item) => (
-                      <HistoryItem
-                        key={item.id}
-                        item={item}
-                        exportChat={exportChat}
-                        onDelete={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          console.log('Delete triggered for item:', item);
-                          setDialogContentWithLogging({ type: 'delete', item });
-                        }}
-                        onDuplicate={() => handleDuplicate(item.id)}
-                        selectionMode={selectionMode}
-                        isSelected={selectedItems.includes(item.id)}
-                        onToggleSelection={toggleItemSelection}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-              <Dialog onBackdrop={closeDialog} onClose={closeDialog}>
-                {dialogContent?.type === 'delete' && (
-                  <>
-                    <div className="p-6 bg-bolt-elements-sidebar-background">
-                      <DialogTitle className="text-bolt-elements-textPrimary">Delete Chat?</DialogTitle>
-                      <DialogDescription className="mt-2 text-bolt-elements-textSecondary">
-                        <p>
-                          You are about to delete{' '}
-                          <span className="font-medium text-bolt-elements-textPrimary">
-                            {dialogContent.item.description}
-                          </span>
-                        </p>
-                        <p className="mt-2">Are you sure you want to delete this chat?</p>
-                      </DialogDescription>
-                    </div>
-                    <div className="flex justify-end gap-3 px-6 py-4 bg-bolt-elements-bg-depth-2 border-t border-bolt-elements-borderColor">
-                      <DialogButton type="secondary" onClick={closeDialog}>
-                        Cancel
-                      </DialogButton>
-                      <DialogButton
-                        type="danger"
-                        onClick={(event) => {
-                          console.log('Dialog delete button clicked for item:', dialogContent.item);
-                          deleteItem(event, dialogContent.item);
-                          closeDialog();
-                        }}
-                      >
-                        Delete
-                      </DialogButton>
-                    </div>
-                  </>
-                )}
-                {dialogContent?.type === 'bulkDelete' && (
-                  <>
-                    <div className="p-6 bg-bolt-elements-sidebar-background">
-                      <DialogTitle className="text-bolt-elements-textPrimary">Delete Selected Chats?</DialogTitle>
-                      <DialogDescription className="mt-2 text-bolt-elements-textSecondary">
-                        <p>
-                          You are about to delete {dialogContent.items.length}{' '}
-                          {dialogContent.items.length === 1 ? 'chat' : 'chats'}:
-                        </p>
-                        <div className="mt-2 max-h-32 overflow-auto border border-bolt-elements-borderColor rounded-md bg-bolt-elements-bg-depth-2 p-2">
-                          <ul className="list-disc pl-5 space-y-1">
-                            {dialogContent.items.map((item) => (
-                              <li key={item.id} className="text-sm">
-                                <span className="font-medium text-bolt-elements-textPrimary">{item.description}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                        <p className="mt-3">Are you sure you want to delete these chats?</p>
-                      </DialogDescription>
-                    </div>
-                    <div className="flex justify-end gap-3 px-6 py-4 bg-bolt-elements-bg-depth-2 border-t border-bolt-elements-borderColor">
-                      <DialogButton type="secondary" onClick={closeDialog}>
-                        Cancel
-                      </DialogButton>
-                      <DialogButton
-                        type="danger"
-                        onClick={() => {
-                          /*
-                           * Pass the current selectedItems to the delete function.
-                           * This captures the state at the moment the user confirms.
-                           */
-                          const itemsToDeleteNow = [...selectedItems];
-                          console.log('Bulk delete confirmed for', itemsToDeleteNow.length, 'items', itemsToDeleteNow);
-                          deleteSelectedItems(itemsToDeleteNow);
-                          closeDialog();
-                        }}
-                      >
-                        Delete
-                      </DialogButton>
-                    </div>
-                  </>
-                )}
-              </Dialog>
-            </DialogRoot>
+                ))}
+                <Dialog onBackdrop={closeDialog} onClose={closeDialog}>
+                  {dialogContent?.type === 'delete' && (
+                    <>
+                      <div className="p-6 bg-bolt-elements-sidebar-background">
+                        <DialogTitle className="text-bolt-elements-textPrimary">Delete Chat?</DialogTitle>
+                        <DialogDescription className="mt-2 text-bolt-elements-textSecondary">
+                          <p>
+                            You are about to delete{' '}
+                            <span className="font-medium text-bolt-elements-textPrimary">
+                              {dialogContent.item.description}
+                            </span>
+                          </p>
+                          <p className="mt-2">Are you sure you want to delete this chat?</p>
+                        </DialogDescription>
+                      </div>
+                      <div className="flex justify-end gap-3 px-6 py-4 bg-bolt-elements-bg-depth-2 border-t border-bolt-elements-borderColor">
+                        <DialogButton type="secondary" onClick={closeDialog}>
+                          Cancel
+                        </DialogButton>
+                        <DialogButton
+                          type="danger"
+                          onClick={(event) => {
+                            console.log('Dialog delete button clicked for item:', dialogContent.item);
+                            deleteItem(event, dialogContent.item);
+                            closeDialog();
+                          }}
+                        >
+                          Delete
+                        </DialogButton>
+                      </div>
+                    </>
+                  )}
+                  {dialogContent?.type === 'bulkDelete' && (
+                    <>
+                      <div className="p-6 bg-bolt-elements-sidebar-background">
+                        <DialogTitle className="text-bolt-elements-textPrimary">Delete Selected Chats?</DialogTitle>
+                        <DialogDescription className="mt-2 text-bolt-elements-textSecondary">
+                          <p>
+                            You are about to delete {dialogContent.items.length}{' '}
+                            {dialogContent.items.length === 1 ? 'chat' : 'chats'}:
+                          </p>
+                          <div className="mt-2 max-h-32 overflow-auto border border-bolt-elements-borderColor rounded-md bg-bolt-elements-bg-depth-2 p-2">
+                            <ul className="list-disc pl-5 space-y-1">
+                              {dialogContent.items.map((item) => (
+                                <li key={item.id} className="text-sm">
+                                  <span className="font-medium text-bolt-elements-textPrimary">{item.description}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                          <p className="mt-3">Are you sure you want to delete these chats?</p>
+                        </DialogDescription>
+                      </div>
+                      <div className="flex justify-end gap-3 px-6 py-4 bg-bolt-elements-bg-depth-2 border-t border-bolt-elements-borderColor">
+                        <DialogButton type="secondary" onClick={closeDialog}>
+                          Cancel
+                        </DialogButton>
+                        <DialogButton
+                          type="danger"
+                          onClick={() => {
+                            /*
+                             * Pass the current selectedItems to the delete function.
+                             * This captures the state at the moment the user confirms.
+                             */
+                            const itemsToDeleteNow = [...selectedItems];
+                            console.log(
+                              'Bulk delete confirmed for',
+                              itemsToDeleteNow.length,
+                              'items',
+                              itemsToDeleteNow,
+                            );
+                            deleteSelectedItems(itemsToDeleteNow);
+                            closeDialog();
+                          }}
+                        >
+                          Delete
+                        </DialogButton>
+                      </div>
+                    </>
+                  )}
+                </Dialog>
+              </DialogRoot>
+            )}
           </div>
           {dashboardUrl && (
             <div className="px-4 pt-2 pb-1 border-t border-bolt-elements-borderColor">

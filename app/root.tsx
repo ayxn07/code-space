@@ -185,7 +185,7 @@ const postMessageBridgeCode = stripIndents`
             // Store the token so nanostores can pick it up
             window.__CODESPACE_TOKEN__ = data.token;
             // Also update the cookie via a lightweight fetch to ourselves
-            document.cookie = 'codespace_auth=' + data.token + '; path=/; secure; samesite=none; max-age=3600';
+            document.cookie = 'codespace_auth=' + data.token + '; path=/; secure; samesite=none; max-age=86400';
             // Dispatch custom event so React components can react
             window.dispatchEvent(new CustomEvent('codespace:token-updated', { detail: { token: data.token } }));
           }
@@ -227,7 +227,7 @@ const postMessageBridgeCode = stripIndents`
     if (urlToken) {
       window.__CODESPACE_TOKEN__ = urlToken;
       // Persist to cookie so token survives full-page navigations (e.g. sidebar <a> clicks)
-      document.cookie = 'codespace_auth=' + urlToken + '; path=/; secure; samesite=none; max-age=3600';
+      document.cookie = 'codespace_auth=' + urlToken + '; path=/; secure; samesite=none; max-age=86400';
     }
 
     // Also try to extract from cookie
@@ -436,7 +436,14 @@ export default function App() {
        * Falls back to the referrer origin captured by the inline script
        */
       if (loaderData?.codespaceApiBaseUrl) {
-        codespaceApiBaseUrl.set(loaderData.codespaceApiBaseUrl);
+        let apiUrl = loaderData.codespaceApiBaseUrl as string;
+
+        // Ensure protocol prefix (env var may be bare domain)
+        if (!/^https?:\/\//i.test(apiUrl)) {
+          apiUrl = `https://${apiUrl}`;
+        }
+
+        codespaceApiBaseUrl.set(apiUrl);
       } else if (win.__CODESPACE_REFERRER_ORIGIN__) {
         codespaceApiBaseUrl.set(win.__CODESPACE_REFERRER_ORIGIN__ as string);
       }

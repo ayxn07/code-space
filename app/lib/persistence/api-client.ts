@@ -56,10 +56,16 @@ let _warnedNoBaseUrl = false;
  *  3. null (not configured — all API calls will gracefully no-op)
  */
 function getBaseUrl(): string | null {
-  const url = codespaceApiBaseUrl.get();
+  let url = codespaceApiBaseUrl.get();
 
   if (url) {
-    return url;
+    // Ensure protocol prefix (missing https:// causes fetch to treat it as relative path)
+    if (!/^https?:\/\//i.test(url)) {
+      url = `https://${url}`;
+    }
+
+    // Remove trailing slash for consistent URL construction
+    return url.replace(/\/+$/, '');
   }
 
   // Not configured — log once and return null

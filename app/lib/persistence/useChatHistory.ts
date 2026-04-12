@@ -41,6 +41,19 @@ export const chatId = atom<string | undefined>(undefined);
 export const description = atom<string | undefined>(undefined);
 export const chatMetadata = atom<IChatMetadata | undefined>(undefined);
 
+/**
+ * Signal atom for triggering a chat reset from outside the hook (e.g., sidebar).
+ * Increment this to force useChatHistory to re-run its init effect and reset
+ * to a fresh "new chat" state — without a full page reload.
+ *
+ * This is needed because `navigateChat` uses `history.replaceState` (not Remix
+ * navigate) to update the URL during the first message save, which desynchronizes
+ * Remix's internal router state from the browser URL. When Remix thinks we're on
+ * `/` but the URL shows `/chat/abc`, calling `navigate('/')` is a no-op.
+ * Incrementing this signal forces the effect to re-run regardless.
+ */
+export const chatResetSignal = atom(0);
+
 /*
  * ---------------------------------------------------------------------------
  * Smart save infrastructure — debounced, non-blocking, with retry
@@ -332,6 +345,17 @@ export function useChatHistory() {
    */
   const [sessionKey, setSessionKey] = useState(0);
 
+  /*
+   * Subscribe to the external reset signal so the sidebar's "Start new chat"
+   * button can trigger a full state reset without a page reload. When the
+   * signal increments, localResetCount changes, which re-runs the effect.
+   */
+  const [localResetCount, setLocalResetCount] = useState(0);
+
+  useEffect(() => {
+    return chatResetSignal.listen((val) => setLocalResetCount(val));
+  }, []);
+
   useEffect(() => {
     // Increment session key so ChatImpl remounts with fresh useChat state
     setSessionKey((prev) => prev + 1);
@@ -538,6 +562,7 @@ ${value.content}
         } else {
           // ─── Chat not found ─────────────────────────────────────────
           console.warn(`[useChatHistory] Chat ${id} not found. Redirecting to home.`);
+          toast.error('Chat not found. Starting a new conversation.');
           navigate('/', { replace: true });
         }
 
@@ -561,7 +586,7 @@ ${value.content}
         setReady(true);
       }
     }
-  }, [mixedId, navigate, searchParams]);
+  }, [mixedId, navigate, searchParams, localResetCount]);
 
   const takeSnapshot = useCallback(
     async (chatIdx: string, files: FileMap, _chatId?: string | undefined, chatSummary?: string) => {
