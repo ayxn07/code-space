@@ -7,7 +7,10 @@ import { Header } from '~/components/header/Header';
 import BackgroundRays from '~/components/ui/BackgroundRays';
 
 export const meta: MetaFunction = () => {
-  return [{ title: 'Hack Cortex' }, { name: 'description', content: 'Hack Cortex — AI-powered development environment' }];
+  return [
+    { title: 'Hack Cortex' },
+    { name: 'description', content: 'Hack Cortex — AI-powered development environment' },
+  ];
 };
 
 export async function loader(args: LoaderFunctionArgs) {

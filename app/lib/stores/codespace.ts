@@ -11,9 +11,11 @@
  */
 import { atom } from 'nanostores';
 
-// ---------------------------------------------------------------------------
-// SSR-safe window global reader
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * SSR-safe window global reader
+ * ---------------------------------------------------------------------------
+ */
 
 function readGlobal<T>(key: string): T | null {
   if (typeof window !== 'undefined') {
@@ -23,16 +25,20 @@ function readGlobal<T>(key: string): T | null {
   return null;
 }
 
-// ---------------------------------------------------------------------------
-// Auth Token
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Auth Token
+ * ---------------------------------------------------------------------------
+ */
 
 /** The current JWT token (set from URL param on load, refreshed via postMessage) */
 export const codespaceToken = atom<string | null>(readGlobal<string>('__CODESPACE_TOKEN__'));
 
-// ---------------------------------------------------------------------------
-// Theme
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Theme
+ * ---------------------------------------------------------------------------
+ */
 
 export interface CodespaceTheme {
   mode: 'light' | 'dark';
@@ -40,13 +46,13 @@ export interface CodespaceTheme {
 }
 
 /** Theme state synced from the parent app */
-export const codespaceTheme = atom<CodespaceTheme | null>(
-  readGlobal<CodespaceTheme>('__CODESPACE_THEME__'),
-);
+export const codespaceTheme = atom<CodespaceTheme | null>(readGlobal<CodespaceTheme>('__CODESPACE_THEME__'));
 
-// ---------------------------------------------------------------------------
-// GitHub
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * GitHub
+ * ---------------------------------------------------------------------------
+ */
 
 export interface CodespaceGitHub {
   connected: boolean;
@@ -55,13 +61,13 @@ export interface CodespaceGitHub {
 }
 
 /** GitHub connection state from the parent app */
-export const codespaceGitHub = atom<CodespaceGitHub | null>(
-  readGlobal<CodespaceGitHub>('__CODESPACE_GITHUB__'),
-);
+export const codespaceGitHub = atom<CodespaceGitHub | null>(readGlobal<CodespaceGitHub>('__CODESPACE_GITHUB__'));
 
-// ---------------------------------------------------------------------------
-// API Base URL
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * API Base URL
+ * ---------------------------------------------------------------------------
+ */
 
 /**
  * The base URL of the parent Next.js app's API (e.g., "https://yourdomain.com").
@@ -71,13 +77,13 @@ export const codespaceGitHub = atom<CodespaceGitHub | null>(
  * document.referrer or localStorage). May be overridden by App()'s useEffect
  * if the root loader provides a server-side value.
  */
-export const codespaceApiBaseUrl = atom<string | null>(
-  readGlobal<string>('__CODESPACE_REFERRER_ORIGIN__'),
-);
+export const codespaceApiBaseUrl = atom<string | null>(readGlobal<string>('__CODESPACE_REFERRER_ORIGIN__'));
 
-// ---------------------------------------------------------------------------
-// User Profile (decoded from JWT)
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * User Profile (decoded from JWT)
+ * ---------------------------------------------------------------------------
+ */
 
 export interface CodespaceProfile {
   username: string;
@@ -87,13 +93,13 @@ export interface CodespaceProfile {
 }
 
 /** User profile extracted from the JWT token claims */
-export const codespaceProfile = atom<CodespaceProfile | null>(
-  readGlobal<CodespaceProfile>('__CODESPACE_PROFILE__'),
-);
+export const codespaceProfile = atom<CodespaceProfile | null>(readGlobal<CodespaceProfile>('__CODESPACE_PROFILE__'));
 
-// ---------------------------------------------------------------------------
-// Dashboard URL (derived from API base + workspace ID)
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Dashboard URL (derived from API base + workspace ID)
+ * ---------------------------------------------------------------------------
+ */
 
 /**
  * Returns the URL to navigate back to the main Hack Cortex dashboard.

@@ -3,71 +3,60 @@ import { HackCortexLogo } from '~/components/ui/HackCortexLogo';
 import styles from './styles.module.scss';
 
 interface SplashScreenProps {
-  /** Minimum time (ms) the splash stays visible. Default 2600. */
+  /** Minimum time (ms) the splash stays visible. Default 2400. */
   minDuration?: number;
+
   /** Called after the splash is fully gone and unmounted. */
   onComplete?: () => void;
 }
 
 /**
- * Full-screen splash overlay with a "curtain open" reveal animation.
+ * Full-screen splash overlay with a clean fade-in/out loading animation.
  *
  * Lifecycle:
- *  1. Logo + text + loader animate in (~1s)
- *  2. Loader fills (~1.6s)
- *  3. Center content fades out
- *  4. Curtains slide apart (1s CSS transition)
- *  5. Overlay unmounts
+ *  1. Logo + text + loader fade in
+ *  2. Loader bar fills over duration
+ *  3. Entire overlay fades out
+ *  4. Overlay unmounts
  */
-export function SplashScreen({ minDuration = 2600, onComplete }: SplashScreenProps) {
-  const [phase, setPhase] = useState<'showing' | 'opening' | 'done'>('showing');
+export function SplashScreen({ minDuration = 2400, onComplete }: SplashScreenProps) {
+  const [phase, setPhase] = useState<'showing' | 'fading' | 'done'>('showing');
 
-  const startOpen = useCallback(() => {
-    // Fade center content, then open curtains
-    setPhase('opening');
+  const startFadeOut = useCallback(() => {
+    setPhase('fading');
 
-    // After curtains finish sliding (1s transition + small buffer)
+    // After fade-out transition completes (600ms + buffer)
     setTimeout(() => {
       setPhase('done');
       onComplete?.();
-    }, 1100);
+    }, 650);
   }, [onComplete]);
 
   useEffect(() => {
-    const timer = setTimeout(startOpen, minDuration);
+    const timer = setTimeout(startFadeOut, minDuration);
     return () => clearTimeout(timer);
-  }, [minDuration, startOpen]);
+  }, [minDuration, startFadeOut]);
 
   // Don't render anything after animation completes
   if (phase === 'done') {
     return null;
   }
 
-  const isOpening = phase === 'opening';
+  const isFading = phase === 'fading';
 
   return (
-    <div className={`${styles.splashOverlay} ${isOpening ? styles.dismissed : ''}`}>
-      {/* Left curtain */}
-      <div
-        className={`${styles.curtain} ${styles.curtainLeft} ${isOpening ? styles.curtainOpen : ''}`}
-      >
-        <div className={styles.curtainAccent} />
-      </div>
-
-      {/* Right curtain */}
-      <div
-        className={`${styles.curtain} ${styles.curtainRight} ${isOpening ? styles.curtainOpen : ''}`}
-      >
-        <div className={styles.curtainAccent} />
-      </div>
-
-      {/* Center content */}
-      <div className={`${styles.centerContent} ${isOpening ? styles.fadeOut : ''}`}>
-        <div className={`${styles.logoWrap} ${!isOpening ? styles.logoPulse : ''}`}>
+    <div className={`${styles.splashOverlay} ${isFading ? styles.fadeOut : ''}`}>
+      <div className={styles.centerContent}>
+        {/* Logo with glow */}
+        <div className={`${styles.logoWrap} ${!isFading ? styles.logoPulse : ''}`}>
           <HackCortexLogo size={72} />
         </div>
+
+        {/* Brand text */}
         <span className={styles.brandText}>Hack Cortex</span>
         <span className={styles.tagline}>AI-Powered Development</span>
+
+        {/* Loading bar */}
         <div className={styles.loaderWrap}>
           <div className={styles.loaderBar} />
         </div>

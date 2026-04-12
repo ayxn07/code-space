@@ -155,8 +155,10 @@ export const CodeMirrorEditor = memo(
     const onChangeRef = useRef(onChange);
     const onSaveRef = useRef(onSave);
 
-    // Auto-scroll follow state: tracks whether we should auto-scroll during streaming.
-    // Resets to true when streaming starts, set to false if user scrolls away from bottom.
+    /*
+     * Auto-scroll follow state: tracks whether we should auto-scroll during streaming.
+     * Resets to true when streaming starts, set to false if user scrolls away from bottom.
+     */
     const autoScrollRef = useRef(true);
     const isStreamingRef = useRef(isStreaming);
     const prevStreamingRef = useRef(false);
@@ -191,7 +193,7 @@ export const CodeMirrorEditor = memo(
       const view = viewRef.current;
 
       if (!view) {
-        return;
+        return undefined;
       }
 
       const scrollDOM = view.scrollDOM;
@@ -215,7 +217,9 @@ export const CodeMirrorEditor = memo(
 
       scrollDOM.addEventListener('scroll', onUserScroll, { passive: true });
 
-      return () => scrollDOM.removeEventListener('scroll', onUserScroll);
+      return () => {
+        scrollDOM.removeEventListener('scroll', onUserScroll);
+      };
     }, []);
 
     useEffect(() => {
@@ -500,8 +504,10 @@ function setEditorDocument(
       },
     });
 
-    // During streaming, scroll to the end of the document so the user
-    // can watch the code being generated in real-time.
+    /*
+     * During streaming, scroll to the end of the document so the user
+     * can watch the code being generated in real-time.
+     */
     if (shouldAutoScroll) {
       requestAnimationFrame(() => {
         const docLength = view.state.doc.length;
@@ -533,8 +539,10 @@ function setEditorDocument(
     });
 
     requestAnimationFrame(() => {
-      // Skip scroll restoration during auto-scroll streaming — the auto-scroll
-      // in the content dispatch above already positions the viewport at the end.
+      /*
+       * Skip scroll restoration during auto-scroll streaming — the auto-scroll
+       * in the content dispatch above already positions the viewport at the end.
+       */
       if (shouldAutoScroll) {
         return;
       }

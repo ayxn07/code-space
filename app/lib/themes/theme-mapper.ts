@@ -7,18 +7,16 @@
  */
 import type { ThemePreset } from './presets';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Helpers
+ * ---------------------------------------------------------------------------
+ */
 
 /** Parse "#RRGGBB" → [r, g, b] */
 function hexToRgb(hex: string): [number, number, number] {
   const h = hex.replace('#', '');
-  return [
-    parseInt(h.slice(0, 2), 16),
-    parseInt(h.slice(2, 4), 16),
-    parseInt(h.slice(4, 6), 16),
-  ];
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
 
 /** Generate a hex color with alpha (00-FF suffix) */
@@ -33,6 +31,7 @@ function hexAlpha(hex: string, opacity: number): string {
 function lighten(hex: string, amount: number): string {
   const [r, g, b] = hexToRgb(hex);
   const mix = (c: number) => Math.min(255, Math.round(c + (255 - c) * amount));
+
   return `#${mix(r).toString(16).padStart(2, '0')}${mix(g).toString(16).padStart(2, '0')}${mix(b).toString(16).padStart(2, '0')}`;
 }
 
@@ -40,12 +39,15 @@ function lighten(hex: string, amount: number): string {
 function darken(hex: string, amount: number): string {
   const [r, g, b] = hexToRgb(hex);
   const mix = (c: number) => Math.max(0, Math.round(c * (1 - amount)));
+
   return `#${mix(r).toString(16).padStart(2, '0')}${mix(g).toString(16).padStart(2, '0')}${mix(b).toString(16).padStart(2, '0')}`;
 }
 
-// ---------------------------------------------------------------------------
-// Accent palette generator
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Accent palette generator
+ * ---------------------------------------------------------------------------
+ */
 
 /**
  * Generates a 50-950 palette from a single accent hex, mimicking the
@@ -55,25 +57,28 @@ function generateAccentPalette(hex: string) {
   return {
     50: lighten(hex, 0.92),
     100: lighten(hex, 0.85),
-    200: lighten(hex, 0.70),
+    200: lighten(hex, 0.7),
     300: lighten(hex, 0.55),
-    400: lighten(hex, 0.30),
+    400: lighten(hex, 0.3),
     500: hex,
     600: darken(hex, 0.15),
-    700: darken(hex, 0.30),
+    700: darken(hex, 0.3),
     800: darken(hex, 0.45),
-    900: darken(hex, 0.60),
+    900: darken(hex, 0.6),
     950: darken(hex, 0.78),
   };
 }
 
-// ---------------------------------------------------------------------------
-// Core mapper
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Core mapper
+ * ---------------------------------------------------------------------------
+ */
 
 export interface ThemeMappingResult {
   /** 'dark' or 'light' — to set on data-theme attribute */
   mode: 'dark' | 'light';
+
   /** Map of CSS property name → value */
   vars: Record<string, string>;
 }
@@ -85,6 +90,7 @@ export interface ThemeMappingResult {
 function isDarkBackground(hex: string): boolean {
   const [r, g, b] = hexToRgb(hex);
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
   return luminance < 0.5;
 }
 
@@ -95,15 +101,13 @@ function isDarkBackground(hex: string): boolean {
  * @param preferDark  If provided, force dark/light mode. Otherwise auto-detect
  *                    from the preset's background color luminance.
  */
-export function mapThemeToVars(
-  preset: ThemePreset,
-  preferDark?: boolean,
-): ThemeMappingResult {
-  const mode = preferDark ?? isDarkBackground(preset.background) ? 'dark' : 'light';
+export function mapThemeToVars(preset: ThemePreset, preferDark?: boolean): ThemeMappingResult {
+  const mode = (preferDark ?? isDarkBackground(preset.background)) ? 'dark' : 'light';
   const isLight = mode === 'light';
 
   // Build the accent palette from the preset's primary color
   const accent = generateAccentPalette(preset.primary);
+
   // Also build alpha variants of accent.500
   const accentAlpha = {
     10: hexAlpha(accent[500], 10),
@@ -124,9 +128,7 @@ export function mapThemeToVars(
   vars['--bolt-elements-bg-depth-1'] = bg;
   vars['--bolt-elements-bg-depth-2'] = isLight ? '#f5f5f5' : bgSecondary;
   vars['--bolt-elements-bg-depth-3'] = isLight ? '#e5e5e5' : bgCard;
-  vars['--bolt-elements-bg-depth-4'] = isLight
-    ? hexAlpha('#808080', 5)
-    : hexAlpha('#ffffff', 5);
+  vars['--bolt-elements-bg-depth-4'] = isLight ? hexAlpha('#808080', 5) : hexAlpha('#ffffff', 5);
 
   // ── Text colors ────────────────────────────────────────────────────
   vars['--bolt-elements-textPrimary'] = isLight ? '#0A0A0A' : '#FFFFFF';
@@ -134,9 +136,7 @@ export function mapThemeToVars(
   vars['--bolt-elements-textTertiary'] = isLight ? '#737373' : mutedFg;
 
   // ── Border ─────────────────────────────────────────────────────────
-  vars['--bolt-elements-borderColor'] = isLight
-    ? hexAlpha('#808080', 10)
-    : hexAlpha('#ffffff', 10);
+  vars['--bolt-elements-borderColor'] = isLight ? hexAlpha('#808080', 10) : hexAlpha('#ffffff', 10);
   vars['--bolt-elements-borderColorActive'] = accent[500];
 
   // ── Code blocks ────────────────────────────────────────────────────
@@ -149,63 +149,43 @@ export function mapThemeToVars(
   vars['--bolt-elements-button-primary-text'] = accent[500];
 
   // ── Buttons: secondary ─────────────────────────────────────────────
-  vars['--bolt-elements-button-secondary-background'] = isLight
-    ? hexAlpha('#808080', 5)
-    : hexAlpha('#ffffff', 5);
+  vars['--bolt-elements-button-secondary-background'] = isLight ? hexAlpha('#808080', 5) : hexAlpha('#ffffff', 5);
   vars['--bolt-elements-button-secondary-backgroundHover'] = isLight
     ? hexAlpha('#808080', 10)
     : hexAlpha('#ffffff', 10);
   vars['--bolt-elements-button-secondary-text'] = isLight ? '#0A0A0A' : '#FFFFFF';
 
   // ── Items (list items, selections) ─────────────────────────────────
-  vars['--bolt-elements-item-contentDefault'] = isLight
-    ? hexAlpha('#0A0A0A', 50)
-    : hexAlpha('#ffffff', 50);
+  vars['--bolt-elements-item-contentDefault'] = isLight ? hexAlpha('#0A0A0A', 50) : hexAlpha('#ffffff', 50);
   vars['--bolt-elements-item-contentActive'] = isLight ? '#0A0A0A' : '#FFFFFF';
   vars['--bolt-elements-item-contentAccent'] = isLight ? accent[700] : accent[500];
-  vars['--bolt-elements-item-backgroundDefault'] = isLight
-    ? 'rgba(0,0,0,0)'
-    : 'rgba(255,255,255,0)';
-  vars['--bolt-elements-item-backgroundActive'] = isLight
-    ? hexAlpha('#808080', 5)
-    : hexAlpha('#ffffff', 10);
+  vars['--bolt-elements-item-backgroundDefault'] = isLight ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0)';
+  vars['--bolt-elements-item-backgroundActive'] = isLight ? hexAlpha('#808080', 5) : hexAlpha('#ffffff', 10);
   vars['--bolt-elements-item-backgroundAccent'] = accentAlpha[10];
 
   // ── Loader ─────────────────────────────────────────────────────────
-  vars['--bolt-elements-loader-background'] = isLight
-    ? hexAlpha('#808080', 10)
-    : hexAlpha('#ffffff', 10);
+  vars['--bolt-elements-loader-background'] = isLight ? hexAlpha('#808080', 10) : hexAlpha('#ffffff', 10);
   vars['--bolt-elements-loader-progress'] = accent[500];
 
   // ── Messages ───────────────────────────────────────────────────────
   vars['--bolt-elements-messages-background'] = isLight ? '#F5F5F5' : bgCard;
   vars['--bolt-elements-messages-linkColor'] = accent[500];
   vars['--bolt-elements-messages-code-background'] = isLight ? '#262626' : bg;
-  vars['--bolt-elements-messages-inlineCode-background'] = isLight
-    ? '#E5E5E5'
-    : darken(bgCard, 0.15);
+  vars['--bolt-elements-messages-inlineCode-background'] = isLight ? '#E5E5E5' : darken(bgCard, 0.15);
   vars['--bolt-elements-messages-inlineCode-text'] = isLight ? '#262626' : '#FFFFFF';
 
   // ── Sidebar ────────────────────────────────────────────────────────
-  vars['--bolt-elements-sidebar-dropdownShadow'] = isLight
-    ? hexAlpha('#808080', 10)
-    : hexAlpha('#000000', 30);
+  vars['--bolt-elements-sidebar-dropdownShadow'] = isLight ? hexAlpha('#808080', 10) : hexAlpha('#000000', 30);
   vars['--bolt-elements-sidebar-background'] = sidebarBg;
-  vars['--bolt-elements-sidebar-headerBg'] = isLight
-    ? lighten(sidebarBg, 0.03)
-    : lighten(sidebarBg, 0.05);
-  vars['--bolt-elements-sidebar-border'] = isLight
-    ? hexAlpha('#808080', 10)
-    : hexAlpha('#ffffff', 8);
+  vars['--bolt-elements-sidebar-headerBg'] = isLight ? lighten(sidebarBg, 0.03) : lighten(sidebarBg, 0.05);
+  vars['--bolt-elements-sidebar-border'] = isLight ? hexAlpha('#808080', 10) : hexAlpha('#ffffff', 8);
   vars['--bolt-elements-sidebar-buttonBackgroundDefault'] = accentAlpha[10];
   vars['--bolt-elements-sidebar-buttonBackgroundHover'] = accentAlpha[20];
   vars['--bolt-elements-sidebar-buttonText'] = isLight ? accent[700] : accent[500];
 
   // ── Artifacts ──────────────────────────────────────────────────────
   vars['--bolt-elements-artifacts-background'] = isLight ? '#ffffff' : bgSecondary;
-  vars['--bolt-elements-artifacts-backgroundHover'] = isLight
-    ? hexAlpha('#808080', 2)
-    : hexAlpha('#ffffff', 5);
+  vars['--bolt-elements-artifacts-backgroundHover'] = isLight ? hexAlpha('#808080', 2) : hexAlpha('#ffffff', 5);
   vars['--bolt-elements-artifacts-inlineCode-background'] = isLight ? '#F5F5F5' : bgCard;
   vars['--bolt-elements-artifacts-inlineCode-text'] = isLight ? '#0A0A0A' : '#FFFFFF';
 
@@ -215,9 +195,7 @@ export function mapThemeToVars(
 
   // ── Terminals ──────────────────────────────────────────────────────
   vars['--bolt-elements-terminals-background'] = bg;
-  vars['--bolt-elements-terminals-buttonBackground'] = isLight
-    ? hexAlpha('#808080', 5)
-    : bgCard;
+  vars['--bolt-elements-terminals-buttonBackground'] = isLight ? hexAlpha('#808080', 5) : bgCard;
 
   // ── Divider ────────────────────────────────────────────────────────
   vars['--bolt-elements-dividerColor'] = isLight ? '#F5F5F5' : borderColor;
@@ -228,9 +206,7 @@ export function mapThemeToVars(
   vars['--bolt-elements-icon-tertiary'] = isLight ? '#737373' : mutedFg;
 
   // ── Prompt ─────────────────────────────────────────────────────────
-  vars['--bolt-elements-prompt-background'] = isLight
-    ? hexAlpha('#ffffff', 80)
-    : hexAlpha(bg, 80);
+  vars['--bolt-elements-prompt-background'] = isLight ? hexAlpha('#ffffff', 80) : hexAlpha(bg, 80);
 
   // ── CTA ────────────────────────────────────────────────────────────
   vars['--bolt-elements-cta-background'] = isLight ? '#F5F5F5' : hexAlpha('#ffffff', 10);
@@ -247,9 +223,7 @@ export function mapThemeToVars(
 
   // ── Scrollbar ──────────────────────────────────────────────────────
   vars['--modern-scrollbar-thumb-background'] = 'rgba(100,100,100,0.3)';
-  vars['--modern-scrollbar-thumb-backgroundHover'] = isLight
-    ? 'rgba(74,74,74,0.8)'
-    : 'rgba(10,10,10,0.8)';
+  vars['--modern-scrollbar-thumb-backgroundHover'] = isLight ? 'rgba(74,74,74,0.8)' : 'rgba(10,10,10,0.8)';
 
   // ── BackgroundRays gradient vars (index.scss) ──────────────────────
   const [pr, pg, pb] = hexToRgb(preset.primary);
@@ -292,9 +266,11 @@ export function mapThemeToVars(
   return { mode, vars };
 }
 
-// ---------------------------------------------------------------------------
-// Apply to DOM
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Apply to DOM
+ * ---------------------------------------------------------------------------
+ */
 
 /**
  * Apply a mapped theme to the document root.
@@ -305,6 +281,7 @@ export function applyThemeToDOM(result: ThemeMappingResult): void {
   root.setAttribute('data-theme', result.mode);
 
   const s = root.style;
+
   for (const [prop, value] of Object.entries(result.vars)) {
     s.setProperty(prop, value);
   }

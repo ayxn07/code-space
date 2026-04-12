@@ -23,9 +23,11 @@ export interface IChatMetadata {
 
 const logger = createScopedLogger('ChatHistory');
 
-// ---------------------------------------------------------------------------
-// IndexedDB — kept ONLY for snapshots (too large for API, local-only is fine)
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * IndexedDB — kept ONLY for snapshots (too large for API, local-only is fine)
+ * ---------------------------------------------------------------------------
+ */
 
 export async function openDatabase(): Promise<IDBDatabase | undefined> {
   if (typeof indexedDB === 'undefined') {
@@ -66,9 +68,11 @@ export async function openDatabase(): Promise<IDBDatabase | undefined> {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Conversion helpers: ApiChat/ApiMessage ↔ ChatHistoryItem
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Conversion helpers: ApiChat/ApiMessage ↔ ChatHistoryItem
+ * ---------------------------------------------------------------------------
+ */
 
 function apiChatToHistoryItem(chat: ApiChat, messages: Message[]): ChatHistoryItem {
   return {
@@ -82,8 +86,10 @@ function apiChatToHistoryItem(chat: ApiChat, messages: Message[]): ChatHistoryIt
 }
 
 function apiMessageToAiMessage(msg: ApiMessage): Message {
-  // The API stores the full AI SDK Message as JSON in the content field
-  // If it was stored as a serialized Message object, parse it back
+  /*
+   * The API stores the full AI SDK Message as JSON in the content field
+   * If it was stored as a serialized Message object, parse it back
+   */
   try {
     const parsed = JSON.parse(msg.content);
 
@@ -110,8 +116,10 @@ function aiMessageToApiFormat(msg: Message): {
   content: string;
   metadata?: Record<string, unknown>;
 } {
-  // Serialize the full Message object as JSON to preserve all fields
-  // (annotations, tool calls, data, etc.)
+  /*
+   * Serialize the full Message object as JSON to preserve all fields
+   * (annotations, tool calls, data, etc.)
+   */
   const role = (['user', 'assistant', 'system'].includes(msg.role) ? msg.role : 'assistant') as
     | 'user'
     | 'assistant'
@@ -124,11 +132,13 @@ function aiMessageToApiFormat(msg: Message): {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Chat CRUD — delegated to API client
-// The `db: IDBDatabase` parameter is kept for signature compatibility but
-// ignored for chat operations. Callers still pass the IDB instance.
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Chat CRUD — delegated to API client
+ * The `db: IDBDatabase` parameter is kept for signature compatibility but
+ * ignored for chat operations. Callers still pass the IDB instance.
+ * ---------------------------------------------------------------------------
+ */
 
 /**
  * Lists all chats (newest first).
@@ -138,9 +148,7 @@ export async function getAll(_db: IDBDatabase): Promise<ChatHistoryItem[]> {
     const chats = await apiListChats();
 
     // For listing, we return chats without messages (they'll be loaded on demand)
-    return chats.map((chat) =>
-      apiChatToHistoryItem(chat, []),
-    );
+    return chats.map((chat) => apiChatToHistoryItem(chat, []));
   } catch (error) {
     logger.error('Failed to list chats from API', error);
     return [];
@@ -169,10 +177,12 @@ export async function setMessages(
   }
 
   try {
-    // Always call createChat — the server uses upsert (ON CONFLICT DO UPDATE)
-    // so this is safe to call even if the chat already exists. This eliminates
-    // the race condition where multiple concurrent saves all see the chat as
-    // "not found" and try to create it simultaneously.
+    /*
+     * Always call createChat — the server uses upsert (ON CONFLICT DO UPDATE)
+     * so this is safe to call even if the chat already exists. This eliminates
+     * the race condition where multiple concurrent saves all see the chat as
+     * "not found" and try to create it simultaneously.
+     */
     await apiCreateChat({
       id,
       title: description,
@@ -269,8 +279,10 @@ export async function deleteById(db: IDBDatabase, id: string): Promise<void> {
  * for the client until the chat is created server-side.
  */
 export async function getNextId(_db: IDBDatabase): Promise<string> {
-  // Generate a temporary UUID-like ID
-  // The actual UUID will be assigned by the server on creation
+  /*
+   * Generate a temporary UUID-like ID
+   * The actual UUID will be assigned by the server on creation
+   */
   return crypto.randomUUID ? crypto.randomUUID() : `temp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
@@ -326,18 +338,20 @@ export async function createChatFromMessages(
   messages: Message[],
   metadata?: IChatMetadata,
 ): Promise<string> {
-  // If persistence is not available, return a local ID — chat will work
-  // in-memory but won't be saved server-side
+  /*
+   * If persistence is not available, return a local ID — chat will work
+   * in-memory but won't be saved server-side
+   */
   if (!isPersistenceAvailable()) {
     return crypto.randomUUID ? crypto.randomUUID() : `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   }
 
   try {
-    // Generate a UUID for the new chat and pass it to the server
-    // so client and server stay in sync
-    const newId = crypto.randomUUID
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    /*
+     * Generate a UUID for the new chat and pass it to the server
+     * so client and server stay in sync
+     */
+    const newId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
     const created = await apiCreateChat({
       id: newId,
@@ -396,10 +410,12 @@ export async function updateChatMetadata(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Snapshot CRUD — stays 100% IndexedDB (snapshots are large file maps,
-// local-only storage is acceptable)
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Snapshot CRUD — stays 100% IndexedDB (snapshots are large file maps,
+ * local-only storage is acceptable)
+ * ---------------------------------------------------------------------------
+ */
 
 export async function getSnapshot(db: IDBDatabase, chatId: string): Promise<Snapshot | undefined> {
   return new Promise((resolve, reject) => {

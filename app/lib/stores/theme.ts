@@ -1,8 +1,8 @@
 import { atom } from 'nanostores';
 import { logStore } from './logs';
 import { codespaceTheme } from './codespace';
-import { findPreset } from '../themes/presets';
-import { mapThemeToVars, applyThemeToDOM } from '../themes/theme-mapper';
+import { findPreset } from '~/lib/themes/presets';
+import { mapThemeToVars, applyThemeToDOM } from '~/lib/themes/theme-mapper';
 
 export type Theme = 'dark' | 'light';
 

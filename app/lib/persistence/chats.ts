@@ -128,6 +128,7 @@ export async function saveChat(_db: IDBDatabase, chat: Chat): Promise<void> {
         }
       }
     }
+
     // If exists, we don't update — saveChat is mainly used for import
   } catch (error) {
     console.error('saveChat: Error saving to API:', error);

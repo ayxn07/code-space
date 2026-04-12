@@ -41,9 +41,11 @@ export const chatId = atom<string | undefined>(undefined);
 export const description = atom<string | undefined>(undefined);
 export const chatMetadata = atom<IChatMetadata | undefined>(undefined);
 
-// ---------------------------------------------------------------------------
-// Smart save infrastructure — debounced, non-blocking, with retry
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Smart save infrastructure — debounced, non-blocking, with retry
+ * ---------------------------------------------------------------------------
+ */
 
 const SAVE_DEBOUNCE_MS = 3000; // 3 seconds after last change
 const MAX_RETRIES = 3;
@@ -69,6 +71,7 @@ interface PendingSave {
   description?: string;
   metadata?: IChatMetadata;
 }
+
 let _pendingSave: PendingSave | null = null;
 
 /**
@@ -76,24 +79,19 @@ let _pendingSave: PendingSave | null = null;
  * Returns true on success, false on failure after all retries.
  */
 async function executeSave(save: PendingSave): Promise<boolean> {
-  // We pass `db` to setMessages for signature compat, but it's only used
-  // for snapshots internally. Chat data goes through the API.
+  /*
+   * We pass `db` to setMessages for signature compat, but it's only used
+   * for snapshots internally. Chat data goes through the API.
+   */
   const idb = db as IDBDatabase;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      await setMessages(
-        idb,
-        save.chatId,
-        save.messages,
-        save.urlId,
-        save.description,
-        undefined,
-        save.metadata,
-      );
+      await setMessages(idb, save.chatId, save.messages, save.urlId, save.description, undefined, save.metadata);
       _lastSavedMessageCount = save.messages.length;
       _hasUnsavedChanges = false;
       _firstSaveDone = true;
+
       return true;
     } catch (error) {
       const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
@@ -107,6 +105,7 @@ async function executeSave(save: PendingSave): Promise<boolean> {
 
   console.error('[auto-save] All retry attempts exhausted. Changes may be lost.');
   toast.error('Failed to save chat. Your changes may be lost.');
+
   return false;
 }
 
@@ -136,6 +135,7 @@ function scheduleSave(save: PendingSave): void {
 
   _saveTimerId = setTimeout(() => {
     _saveTimerId = null;
+
     const s = _pendingSave;
 
     if (s) {
@@ -187,11 +187,15 @@ function resetSaveState(): void {
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', (event) => {
     if (_hasUnsavedChanges && _pendingSave && isPersistenceAvailable()) {
-      // Use sendBeacon for reliable delivery during unload
-      // Fall back to sync flush as best-effort
+      /*
+       * Use sendBeacon for reliable delivery during unload
+       * Fall back to sync flush as best-effort
+       */
       try {
-        // Trigger immediate flush — can't truly await in beforeunload,
-        // but starting the promise helps if the browser gives us time
+        /*
+         * Trigger immediate flush — can't truly await in beforeunload,
+         * but starting the promise helps if the browser gives us time
+         */
         flushSave();
         flushSnapshotUpload();
       } catch {
@@ -204,13 +208,15 @@ if (typeof window !== 'undefined') {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Snapshot upload infrastructure — debounced, separate from message saves
-// ---------------------------------------------------------------------------
-// Snapshots are larger than messages, so we use a longer debounce (5s).
-// The snapshot is first saved to IndexedDB (immediate, same as before),
-// then uploaded to the server in the background.
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Snapshot upload infrastructure — debounced, separate from message saves
+ * ---------------------------------------------------------------------------
+ * Snapshots are larger than messages, so we use a longer debounce (5s).
+ * The snapshot is first saved to IndexedDB (immediate, same as before),
+ * then uploaded to the server in the background.
+ * ---------------------------------------------------------------------------
+ */
 
 const SNAPSHOT_UPLOAD_DEBOUNCE_MS = 5000; // 5 seconds after last snapshot change
 const SNAPSHOT_MAX_RETRIES = 2;
@@ -222,6 +228,7 @@ interface PendingSnapshotUpload {
   chatId: string;
   snapshot: Snapshot;
 }
+
 let _pendingSnapshotUpload: PendingSnapshotUpload | null = null;
 
 /**
@@ -245,7 +252,9 @@ async function executeSnapshotUpload(upload: PendingSnapshotUpload): Promise<boo
     }
   }
 
-  console.error('[snapshot-upload] All retry attempts exhausted. Snapshot not uploaded (local copy in IndexedDB is still available).');
+  console.error(
+    '[snapshot-upload] All retry attempts exhausted. Snapshot not uploaded (local copy in IndexedDB is still available).',
+  );
 
   return false;
 }
@@ -266,6 +275,7 @@ function scheduleSnapshotUpload(chatId: string, snapshot: Snapshot): void {
 
   _snapshotUploadTimerId = setTimeout(() => {
     _snapshotUploadTimerId = null;
+
     const upload = _pendingSnapshotUpload;
 
     if (upload) {
@@ -314,10 +324,12 @@ export function useChatHistory() {
   const [ready, setReady] = useState<boolean>(false);
   const [urlId, setUrlId] = useState<string | undefined>();
 
-  // Stable key that only increments on route-level chat switches (when the
-  // effect fires due to mixedId changing). This is used as the React key for
-  // ChatImpl instead of chatId, so that assigning a new chatId during the
-  // first message save does NOT cause a destructive remount.
+  /*
+   * Stable key that only increments on route-level chat switches (when the
+   * effect fires due to mixedId changing). This is used as the React key for
+   * ChatImpl instead of chatId, so that assigning a new chatId during the
+   * first message save does NOT cause a destructive remount.
+   */
   const [sessionKey, setSessionKey] = useState(0);
 
   useEffect(() => {
@@ -327,23 +339,27 @@ export function useChatHistory() {
     // Reset save state when switching chats
     resetSaveState();
 
-    // CRITICAL: Reset UI state when chat changes so ChatImpl unmounts and
-    // remounts with fresh useChat state. Without this, navigating between
-    // chats leaves stale messages because useChat only reads initialMessages
-    // on mount and _index.tsx / chat.$id.tsx share the same component ref
-    // (React re-renders instead of remounting).
+    /*
+     * CRITICAL: Reset UI state when chat changes so ChatImpl unmounts and
+     * remounts with fresh useChat state. Without this, navigating between
+     * chats leaves stale messages because useChat only reads initialMessages
+     * on mount and _index.tsx / chat.$id.tsx share the same component ref
+     * (React re-renders instead of remounting).
+     */
     setReady(false);
     setInitialMessages([]);
     setArchivedMessages([]);
     setUrlId(undefined);
 
     if (mixedId) {
-      // ---------------------------------------------------------------------------
-      // Loading an existing chat by ID
-      // ---------------------------------------------------------------------------
-      // We need the persistence API to be available (token + baseUrl).
-      // These are set asynchronously from the JWT/referrer in root.tsx,
-      // so we wait briefly for them before attempting to load.
+      /*
+       * ---------------------------------------------------------------------------
+       * Loading an existing chat by ID
+       * ---------------------------------------------------------------------------
+       * We need the persistence API to be available (token + baseUrl).
+       * These are set asynchronously from the JWT/referrer in root.tsx,
+       * so we wait briefly for them before attempting to load.
+       */
       loadChat(mixedId);
     } else {
       // No mixedId — new chat. Reset atoms and mark ready.
@@ -370,6 +386,7 @@ export function useChatHistory() {
           // If persistence IS expected but not available, show error but don't block UI
           toast.error('Unable to connect to server. Chat history may be unavailable.');
           setReady(true);
+
           return;
         }
 
@@ -505,11 +522,13 @@ ${value.content}
           _lastSavedMessageCount = storedMessages.messages.length;
           _firstSaveDone = true;
         } else if (storedMessages) {
-          // ─── Chat exists but has 0 messages ─────────────────────────
-          // This can happen if the user created a chat and the 3-second
-          // debounce hasn't fired yet, or if the first message is still
-          // being streamed. DON'T bounce to / — show an empty chat
-          // with the correct chatId so new messages will save to it.
+          /*
+           * ─── Chat exists but has 0 messages ─────────────────────────
+           * This can happen if the user created a chat and the 3-second
+           * debounce hasn't fired yet, or if the first message is still
+           * being streamed. DON'T bounce to / — show an empty chat
+           * with the correct chatId so new messages will save to it.
+           */
           console.info(`[useChatHistory] Chat ${id} found but has 0 messages. Showing empty chat.`);
           chatId.set(storedMessages.id);
           setUrlId(storedMessages.urlId);
@@ -627,8 +646,10 @@ ${value.content}
         return;
       }
 
-      // Don't block on persistence — if API is not ready yet, messages will
-      // be saved by the next debounce tick once it becomes available
+      /*
+       * Don't block on persistence — if API is not ready yet, messages will
+       * be saved by the next debounce tick once it becomes available
+       */
       if (!isPersistenceAvailable()) {
         console.info('[useChatHistory] Persistence not available yet, skipping save.');
         return;
@@ -687,8 +708,10 @@ ${value.content}
         return;
       }
 
-      // Schedule a debounced, non-blocking save (fire-and-forget).
-      // For the first save of a new chat, this fires immediately (no debounce).
+      /*
+       * Schedule a debounced, non-blocking save (fire-and-forget).
+       * For the first save of a new chat, this fires immediately (no debounce).
+       */
       const allMessages = [...archivedMessages, ...messages];
       scheduleSave({
         chatId: finalChatId,

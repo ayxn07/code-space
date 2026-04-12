@@ -12,9 +12,11 @@
  */
 import { codespaceToken, codespaceApiBaseUrl } from '~/lib/stores/codespace';
 
-// ---------------------------------------------------------------------------
-// Types (mirrors the parent app's types)
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Types (mirrors the parent app's types)
+ * ---------------------------------------------------------------------------
+ */
 
 export interface ApiChat {
   id: string;
@@ -37,9 +39,11 @@ export interface ApiMessage {
   created_at: string;
 }
 
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Internal helpers
+ * ---------------------------------------------------------------------------
+ */
 
 let _warnedNoBaseUrl = false;
 
@@ -61,7 +65,9 @@ function getBaseUrl(): string | null {
   // Not configured — log once and return null
   if (!_warnedNoBaseUrl) {
     _warnedNoBaseUrl = true;
-    console.info('[codespace-api] CODESPACE_API_BASE_URL not configured. Chat persistence disabled — using local-only mode.');
+    console.info(
+      '[codespace-api] CODESPACE_API_BASE_URL not configured. Chat persistence disabled — using local-only mode.',
+    );
   }
 
   return null;
@@ -146,9 +152,11 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   return res.json();
 }
 
-// ---------------------------------------------------------------------------
-// Chat CRUD
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Chat CRUD
+ * ---------------------------------------------------------------------------
+ */
 
 /**
  * Lists all chats for the workspace, newest first.
@@ -258,9 +266,11 @@ export async function apiDeleteChat(chatId: string): Promise<void> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Message CRUD
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Message CRUD
+ * ---------------------------------------------------------------------------
+ */
 
 /**
  * Lists all messages for a chat, chronological order.
@@ -352,9 +362,11 @@ export async function apiReplaceMessages(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Snapshot persistence (Supabase Storage via HackCortex API)
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Snapshot persistence (Supabase Storage via HackCortex API)
+ * ---------------------------------------------------------------------------
+ */
 
 /**
  * Compresses a string using gzip via the browser's CompressionStream API.
@@ -370,7 +382,6 @@ async function gzipCompress(data: string): Promise<{ bytes: Uint8Array; compress
   const chunks: Uint8Array[] = [];
   const reader = stream.getReader();
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const { done, value } = await reader.read();
 
@@ -409,7 +420,6 @@ async function gzipDecompress(data: ArrayBuffer): Promise<string> {
     const reader = stream.getReader();
     const chunks: Uint8Array[] = [];
 
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const { done, value } = await reader.read();
 

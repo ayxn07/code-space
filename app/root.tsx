@@ -48,9 +48,11 @@ export const links: LinksFunction = () => [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// Root Loader — passes server-side env vars to the client
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * Root Loader — passes server-side env vars to the client
+ * ---------------------------------------------------------------------------
+ */
 
 export async function loader({ context }: LoaderFunctionArgs) {
   const env = (context.cloudflare?.env || {}) as unknown as Record<string, string>;
@@ -343,7 +345,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 import { logStore } from './lib/stores/logs';
-import { codespaceToken, codespaceTheme, codespaceGitHub, codespaceApiBaseUrl, codespaceProfile } from './lib/stores/codespace';
+import {
+  codespaceToken,
+  codespaceTheme,
+  codespaceGitHub,
+  codespaceApiBaseUrl,
+  codespaceProfile,
+} from './lib/stores/codespace';
 import { profileStore, updateProfile } from './lib/stores/profile';
 import { findPreset } from './lib/themes/presets';
 import { mapThemeToVars, applyThemeToDOM } from './lib/themes/theme-mapper';
@@ -380,11 +388,13 @@ export default function App() {
         logStore.logError('Failed to initialize debug logging', error);
       });
 
-    // -----------------------------------------------------------------------
-    // Codespace bridge: Sync window globals → nanostores
-    // The inline <script> in <Head> sets window.__CODESPACE_*__ before React
-    // hydrates. We read those here and also listen for live updates.
-    // -----------------------------------------------------------------------
+    /*
+     * -----------------------------------------------------------------------
+     * Codespace bridge: Sync window globals → nanostores
+     * The inline <script> in <Head> sets window.__CODESPACE_*__ before React
+     * hydrates. We read those here and also listen for live updates.
+     * -----------------------------------------------------------------------
+     */
 
     // Seed nanostores from globals set by the inline bridge script
     if (typeof window !== 'undefined') {
@@ -409,9 +419,11 @@ export default function App() {
         const p = win.__CODESPACE_PROFILE__ as { username: string; email: string; userId: string; workspaceId: string };
         codespaceProfile.set(p);
 
-        // Also populate bolt.diy's own profileStore so all existing UI components
-        // (Menu, AvatarDropdown, UserMessage) show the real name instead of "Guest User".
-        // Only seed if the user hasn't already set a custom profile.
+        /*
+         * Also populate bolt.diy's own profileStore so all existing UI components
+         * (Menu, AvatarDropdown, UserMessage) show the real name instead of "Guest User".
+         * Only seed if the user hasn't already set a custom profile.
+         */
         const existingProfile = profileStore.get();
 
         if (!existingProfile?.username) {
@@ -419,18 +431,22 @@ export default function App() {
         }
       }
 
-      // Set API base URL from the root loader (server env → client)
-      // Falls back to the referrer origin captured by the inline script
+      /*
+       * Set API base URL from the root loader (server env → client)
+       * Falls back to the referrer origin captured by the inline script
+       */
       if (loaderData?.codespaceApiBaseUrl) {
         codespaceApiBaseUrl.set(loaderData.codespaceApiBaseUrl);
       } else if (win.__CODESPACE_REFERRER_ORIGIN__) {
         codespaceApiBaseUrl.set(win.__CODESPACE_REFERRER_ORIGIN__ as string);
       }
 
-      // ─── Apply synced theme from JWT ─────────────────────────────────
-      // The inline script extracted theme_id from the JWT (URL or cookie)
-      // before React loaded and persisted it to localStorage. We try the
-      // window global first, then fall back to localStorage.
+      /*
+       * ─── Apply synced theme from JWT ─────────────────────────────────
+       * The inline script extracted theme_id from the JWT (URL or cookie)
+       * before React loaded and persisted it to localStorage. We try the
+       * window global first, then fall back to localStorage.
+       */
       const syncedThemeId =
         (win.__CODESPACE_THEME_ID__ as string | undefined) ||
         localStorage.getItem('hack_cortex_synced_theme_id') ||

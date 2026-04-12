@@ -134,7 +134,6 @@ export const AvatarDropdown = ({ onSelectTab }: AvatarDropdownProps) => {
             <div className="i-ph:download w-4 h-4 text-gray-400 group-hover:text-purple-500 dark:group-hover:text-purple-400 transition-colors" />
             Download Debug Log
           </DropdownMenu.Item>
-
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>

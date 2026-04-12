@@ -8,7 +8,10 @@ import BackgroundRays from '~/components/ui/BackgroundRays';
 import { SplashScreen } from '~/components/ui/SplashScreen';
 
 export const meta: MetaFunction = () => {
-  return [{ title: 'Hack Cortex' }, { name: 'description', content: 'Hack Cortex — AI-powered development environment' }];
+  return [
+    { title: 'Hack Cortex' },
+    { name: 'description', content: 'Hack Cortex — AI-powered development environment' },
+  ];
 };
 
 export const loader = () => json({});
@@ -26,6 +29,7 @@ function shouldShowSplash(): boolean {
   }
 
   sessionStorage.setItem(key, '1');
+
   return true;
 }
 
@@ -43,11 +47,7 @@ export default function Index() {
       <BackgroundRays />
       <Header />
       <ClientOnly fallback={<BaseChat />}>{() => <Chat />}</ClientOnly>
-      {showSplash && (
-        <ClientOnly>
-          {() => <SplashScreen />}
-        </ClientOnly>
-      )}
+      {showSplash && <ClientOnly>{() => <SplashScreen />}</ClientOnly>}
     </div>
   );
 }

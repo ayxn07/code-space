@@ -1,81 +1,21 @@
 // ---------------------------------------------------------------------------
-// SplashScreen — Curtain-open reveal animation
+// SplashScreen — Clean fade loading animation
 // ---------------------------------------------------------------------------
 
 .splashOverlay {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  pointer-events: all;
   display: flex;
   align-items: center;
   justify-content: center;
-
-  // Once dismissed, let pointer events fall through and hide
-  &.dismissed {
-    pointer-events: none;
-  }
-}
-
-// ── Curtain halves ──────────────────────────────────────────────────────────
-
-.curtain {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 50%;
   background: var(--bolt-elements-bg-depth-1);
-  will-change: transform;
-  transition: transform 1s cubic-bezier(0.76, 0, 0.24, 1);
+  opacity: 1;
+  transition: opacity 0.6s ease-out;
 
-  // Subtle inner shadow to give "fabric edge" depth
-  &::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 40px;
+  &.fadeOut {
+    opacity: 0;
     pointer-events: none;
-  }
-}
-
-.curtainLeft {
-  left: 0;
-  transform: translateX(0);
-
-  &::after {
-    right: 0;
-    background: linear-gradient(to left, rgba(0, 0, 0, 0.08), transparent);
-
-    :global(html[data-theme='light']) & {
-      background: linear-gradient(to left, rgba(0, 0, 0, 0.05), transparent);
-    }
-  }
-}
-
-.curtainRight {
-  right: 0;
-  transform: translateX(0);
-
-  &::after {
-    left: 0;
-    background: linear-gradient(to right, rgba(0, 0, 0, 0.08), transparent);
-
-    :global(html[data-theme='light']) & {
-      background: linear-gradient(to right, rgba(0, 0, 0, 0.05), transparent);
-    }
-  }
-}
-
-// ── Open state ──────────────────────────────────────────────────────────────
-
-.curtainOpen {
-  &.curtainLeft {
-    transform: translateX(-105%);
-  }
-
-  &.curtainRight {
-    transform: translateX(105%);
   }
 }
 
@@ -88,12 +28,6 @@
   flex-direction: column;
   align-items: center;
   gap: 20px;
-  opacity: 1;
-  transition: opacity 0.5s ease-out;
-
-  &.fadeOut {
-    opacity: 0;
-  }
 }
 
 // Logo wrapper with glow + entrance
@@ -207,30 +141,4 @@
   100% {
     background-position: -200% 0;
   }
-}
-
-// ── Accent line detail on curtains ──────────────────────────────────────────
-
-.curtainAccent {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    var(--primary-color),
-    var(--accent-color),
-    var(--primary-color),
-    transparent
-  );
-  opacity: 0.4;
-}
-
-.curtainLeft .curtainAccent {
-  right: 0;
-}
-
-.curtainRight .curtainAccent {
-  left: 0;
 }

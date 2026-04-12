@@ -29,10 +29,7 @@ export interface CodespacePayload {
  * - Cloudflare env binding (in function handler)
  * - process.env (in Docker/Railway)
  */
-export async function verifyToken(
-  token: string,
-  secret?: string,
-): Promise<CodespacePayload | null> {
+export async function verifyToken(token: string, secret?: string): Promise<CodespacePayload | null> {
   const jwtSecret = secret || (typeof process !== 'undefined' ? process.env?.CODESPACE_JWT_SECRET : undefined);
 
   if (!jwtSecret) {

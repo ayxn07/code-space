@@ -95,9 +95,11 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       const wc = await webcontainer;
       const process = await wc.spawn('npx', ['--yes', 'serve'], { cwd: WORK_DIR });
 
-      // Don't await process.exit — it's a long-running server.
-      // WebContainer will fire 'server-ready' when it starts listening,
-      // which PreviewsStore picks up automatically.
+      /*
+       * Don't await process.exit — it's a long-running server.
+       * WebContainer will fire 'server-ready' when it starts listening,
+       * which PreviewsStore picks up automatically.
+       */
       process.exit.then((exitCode) => {
         if (exitCode !== 0) {
           setServerStartError(`Server exited with code ${exitCode}`);

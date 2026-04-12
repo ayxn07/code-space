@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import { Dialog, DialogButton, DialogDescription, DialogRoot, DialogTitle } from '~/components/ui/Dialog';
 import { ThemeSwitch } from '~/components/ui/ThemeSwitch';
 import { ControlPanel } from '~/components/@settings/core/ControlPanel';
-import { SettingsButton, HelpButton } from '~/components/ui/SettingsButton';
+import { SettingsButton } from '~/components/ui/SettingsButton';
 import { Button } from '~/components/ui/Button';
 import { db, deleteById, getAll, chatId, type ChatHistoryItem, useChatHistory } from '~/lib/persistence';
 import { waitForPersistence } from '~/lib/persistence/api-client';
@@ -77,9 +77,8 @@ export const Menu = () => {
   const csProfile = useStore(codespaceProfile);
 
   // Derive dashboard URL from API base + workspace ID
-  const dashboardUrl = apiBaseUrl && csProfile?.workspaceId
-    ? `${apiBaseUrl.replace(/\/$/, '')}/workspace/${csProfile.workspaceId}`
-    : null;
+  const dashboardUrl =
+    apiBaseUrl && csProfile?.workspaceId ? `${apiBaseUrl.replace(/\/$/, '')}/workspace/${csProfile.workspaceId}` : null;
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
@@ -89,9 +88,11 @@ export const Menu = () => {
   });
 
   const loadEntries = useCallback(() => {
-    // Wait for persistence API (token + base URL) to become available
-    // before fetching chats. On hard navigation these are set asynchronously
-    // and may not be ready when the sidebar first opens.
+    /*
+     * Wait for persistence API (token + base URL) to become available
+     * before fetching chats. On hard navigation these are set asynchronously
+     * and may not be ready when the sidebar first opens.
+     */
     waitForPersistence(5000)
       .then((available) => {
         if (!available) {
@@ -99,8 +100,10 @@ export const Menu = () => {
           return [];
         }
 
-        // db parameter is kept for signature compat but getAll() calls the API directly.
-        // Pass db (may be undefined) — getAll gracefully handles it.
+        /*
+         * db parameter is kept for signature compat but getAll() calls the API directly.
+         * Pass db (may be undefined) — getAll gracefully handles it.
+         */
         return getAll(db as IDBDatabase);
       })
       .then((list) => (list || []).filter((item) => item.urlId))
@@ -114,23 +117,20 @@ export const Menu = () => {
       .catch((error) => toast.error(error.message));
   }, []);
 
-  const deleteChat = useCallback(
-    async (id: string): Promise<void> => {
-      // Delete chat snapshot from localStorage
-      try {
-        const snapshotKey = `snapshot:${id}`;
-        localStorage.removeItem(snapshotKey);
-        console.log('Removed snapshot for chat:', id);
-      } catch (snapshotError) {
-        console.error(`Error deleting snapshot for chat ${id}:`, snapshotError);
-      }
+  const deleteChat = useCallback(async (id: string): Promise<void> => {
+    // Delete chat snapshot from localStorage
+    try {
+      const snapshotKey = `snapshot:${id}`;
+      localStorage.removeItem(snapshotKey);
+      console.log('Removed snapshot for chat:', id);
+    } catch (snapshotError) {
+      console.error(`Error deleting snapshot for chat ${id}:`, snapshotError);
+    }
 
-      // Delete the chat from the database (API + local snapshot)
-      await deleteById(db as IDBDatabase, id);
-      console.log('Successfully deleted chat:', id);
-    },
-    [],
-  );
+    // Delete the chat from the database (API + local snapshot)
+    await deleteById(db as IDBDatabase, id);
+    console.log('Successfully deleted chat:', id);
+  }, []);
 
   const deleteItem = useCallback(
     (event: React.UIEvent, item: ChatHistoryItem) => {
@@ -386,8 +386,10 @@ export const Menu = () => {
             <div className="flex gap-2">
               <button
                 onClick={() => {
-                  // Hard navigation to fully reset all state (atoms, chatStore, memo'd components).
-                  // <Link to="/"> is a no-op when already on "/" and doesn't reset global state.
+                  /*
+                   * Hard navigation to fully reset all state (atoms, chatStore, memo'd components).
+                   * <Link to="/"> is a no-op when already on "/" and doesn't reset global state.
+                   */
                   window.location.pathname = '/';
                 }}
                 className="flex-1 flex gap-2 items-center bg-bolt-elements-sidebar-buttonBackgroundDefault text-bolt-elements-sidebar-buttonText hover:bg-bolt-elements-sidebar-buttonBackgroundHover rounded-lg px-4 py-2 transition-colors"
