@@ -373,6 +373,12 @@ export function useChatHistory() {
     setArchivedMessages([]);
     setUrlId(undefined);
 
+    /*
+     * Reset workbench state (artifacts, editor, alerts) so the new chat
+     * doesn't inherit files/actions from the previous chat.
+     */
+    workbenchStore.resetForNewChat();
+
     if (mixedId) {
       /*
        * ---------------------------------------------------------------------------
@@ -639,8 +645,25 @@ export function useChatHistory() {
 
       takeSnapshot(messages[messages.length - 1].id, workbenchStore.files.get(), _urlId, chatSummary);
 
-      if (!description.get() && firstArtifact?.title) {
-        description.set(firstArtifact?.title);
+      if (!description.get()) {
+        /*
+         * Generate a meaningful chat title from the user's first message.
+         * Falls back to the first artifact title if no user message exists.
+         */
+        const firstUserMessage = messages.find((m) => m.role === 'user');
+        const userText = firstUserMessage
+          ? (Array.isArray(firstUserMessage.content)
+              ? (firstUserMessage.content.find((p: any) => p.type === 'text') as any)?.text
+              : firstUserMessage.content) || ''
+          : '';
+
+        if (userText) {
+          /* Truncate to a reasonable title length */
+          const title = userText.length > 60 ? userText.slice(0, 57) + '...' : userText;
+          description.set(title);
+        } else if (firstArtifact?.title) {
+          description.set(firstArtifact.title);
+        }
       }
 
       // Ensure chatId.get() is used here as well

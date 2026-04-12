@@ -461,6 +461,29 @@ export class WorkbenchStore {
     // TODO: what do we wanna do and how do we wanna recover from this?
   }
 
+  /**
+   * Resets workbench state for a new/different chat.
+   * Clears artifacts, editor documents, and alerts so the new chat
+   * starts with a clean slate. The WebContainer filesystem is NOT
+   * wiped — snapshot restoration (if any) will overwrite the relevant
+   * files, and the file watcher will re-populate the FilesStore.
+   */
+  resetForNewChat() {
+    this.artifacts.set({});
+    this.artifactIdList = [];
+    this.#reloadedMessages.clear();
+    this.showWorkbench.set(false);
+    this.currentView.set('code');
+    this.unsavedFiles.set(new Set());
+    this.actionAlert.set(undefined);
+    this.supabaseAlert.set(undefined);
+    this.deployAlert.set(undefined);
+    this.modifiedFiles.clear();
+    this.setSelectedFile(undefined);
+    this.#editorStore.documents.set({});
+    this.resetAllFileModifications();
+  }
+
   setReloadedMessages(messages: string[]) {
     this.#reloadedMessages = new Set(messages);
   }
