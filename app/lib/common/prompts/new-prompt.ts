@@ -167,12 +167,28 @@ The year is 2025.
   Action Types:
     - shell: Running commands (use --yes for npx/npm create, && for sequences, NEVER re-run dev servers)
     - start: Starting project (use ONLY for project startup, LAST action)
-    - file: Creating/updating files (add filePath and contentType attributes)
+    - file: Creating NEW files or fully rewriting existing files (add filePath attribute). Content must be the COMPLETE file — no placeholders or truncation.
+    - diff: For making targeted edits to EXISTING files. Add filePath attribute. Use SEARCH/REPLACE blocks:
 
-  File Action Rules:
+        <<<<<<< SEARCH
+        exact lines from the current file
+        =======
+        replacement lines
+        >>>>>>> REPLACE
+
+      Rules for diff:
+        - The SEARCH block must match EXACTLY what is in the file (whitespace and indentation matter).
+        - Multiple SEARCH/REPLACE blocks can appear in one diff action for several changes to the same file.
+        - PREFERRED over file when changing a small part of an existing file (bug fix, adding an import, tweaking a function).
+        - NEVER use diff for new files or SQL migrations — use file for those.
+
+  When to use file vs diff:
+    - Creating a brand-new file → file
+    - Rewriting most of an existing file → file
+    - Changing a few lines in an existing file → diff (PREFERRED — faster, safer, fewer tokens)
+
+  File / Diff Rules:
     - Only include new/modified files
-    - ALWAYS add contentType attribute
-    - NEVER use diffs for new files or SQL migrations
     - FORBIDDEN: Binary files, base64 assets
 
   Action Order:
