@@ -222,8 +222,8 @@ export function mapThemeToVars(preset: ThemePreset, preferDark?: boolean): Theme
   vars['--bolt-elements-preview-addressBar-textActive'] = isLight ? '#0A0A0A' : '#FFFFFF';
 
   // ── Scrollbar ──────────────────────────────────────────────────────
-  vars['--modern-scrollbar-thumb-background'] = 'rgba(100,100,100,0.3)';
-  vars['--modern-scrollbar-thumb-backgroundHover'] = isLight ? 'rgba(74,74,74,0.8)' : 'rgba(10,10,10,0.8)';
+  vars['--modern-scrollbar-thumb-background'] = hexAlpha(accent[500], 30);
+  vars['--modern-scrollbar-thumb-backgroundHover'] = hexAlpha(accent[500], 60);
 
   // ── BackgroundRays gradient vars (index.scss) ──────────────────────
   const [pr, pg, pb] = hexToRgb(preset.primary);
