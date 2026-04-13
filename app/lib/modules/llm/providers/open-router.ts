@@ -12,6 +12,11 @@ interface OpenRouterModel {
     prompt: number;
     completion: number;
   };
+  top_provider: {
+    context_length: number;
+    max_completion_tokens: number | null;
+    is_moderated: boolean;
+  };
 }
 
 interface OpenRouterModelsResponse {
@@ -29,21 +34,23 @@ export default class OpenRouterProvider extends BaseProvider {
   staticModels: ModelInfo[] = [
     /*
      * Essential fallback models - only the most stable/reliable ones
-     * Claude 3.5 Sonnet via OpenRouter: 200k context
+     * Claude 3.5 Sonnet via OpenRouter: 200k context, 128k output
      */
     {
       name: 'anthropic/claude-3.5-sonnet',
       label: 'Claude 3.5 Sonnet',
       provider: 'OpenRouter',
       maxTokenAllowed: 200000,
+      maxCompletionTokens: 128000,
     },
 
-    // GPT-4o via OpenRouter: 128k context
+    // GPT-4o via OpenRouter: 128k context, 16k output
     {
       name: 'openai/gpt-4o',
       label: 'GPT-4o',
       provider: 'OpenRouter',
       maxTokenAllowed: 128000,
+      maxCompletionTokens: 16384,
     },
   ];
 
@@ -71,11 +78,21 @@ export default class OpenRouterProvider extends BaseProvider {
           const maxAllowed = 1000000; // 1M tokens max for safety
           const finalContext = Math.min(contextWindow, maxAllowed);
 
+          /*
+           * Read the model's actual output token limit from the API.
+           * OpenRouter returns `top_provider.max_completion_tokens` per model
+           * (e.g. GPT-4o = 16384, Claude Sonnet 4 = 64000).
+           * When null (e.g. DeepSeek V3), fall back to a generous default.
+           */
+          const apiCompletionLimit = m.top_provider?.max_completion_tokens;
+          const completionTokens = apiCompletionLimit && apiCompletionLimit > 0 ? apiCompletionLimit : 32768;
+
           return {
             name: m.id,
             label: `${m.name} - in:$${(m.pricing.prompt * 1_000_000).toFixed(2)} out:$${(m.pricing.completion * 1_000_000).toFixed(2)} - context ${finalContext >= 1000000 ? Math.floor(finalContext / 1000000) + 'M' : Math.floor(finalContext / 1000) + 'k'}`,
             provider: this.name,
             maxTokenAllowed: finalContext,
+            maxCompletionTokens: completionTokens,
           };
         });
     } catch (error) {

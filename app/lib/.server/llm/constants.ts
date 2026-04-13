@@ -7,25 +7,27 @@ export const MAX_TOKENS = 128000;
 
 /*
  * Provider-specific default completion token limits
- * Used as fallbacks when model doesn't specify maxCompletionTokens
+ * Used as fallbacks when model doesn't specify maxCompletionTokens.
+ * These should be generous — the model's own limit (from API metadata)
+ * is preferred and will override these when available.
  */
 export const PROVIDER_COMPLETION_LIMITS: Record<string, number> = {
-  OpenAI: 4096, // Standard GPT models (o1 models have much higher limits)
-  Github: 4096, // GitHub Models use OpenAI-compatible limits
-  Anthropic: 64000, // Conservative limit for Claude 4 models (Opus: 32k, Sonnet: 64k)
-  Google: 8192, // Gemini 1.5 Pro/Flash standard limit
+  OpenAI: 16384, // GPT-4o supports 16k output; o1/o3 have model-specific overrides
+  Github: 16384, // GitHub Models — mirrors OpenAI capabilities
+  Anthropic: 128000, // Claude 3.5/3.7/4 Sonnet all support 64-128k output
+  Google: 65536, // Gemini 2.5 Pro supports 65k; Flash is lower but set per-model
   Cohere: 4000,
-  DeepSeek: 8192,
+  DeepSeek: 16384, // DeepSeek R1 supports 16k; V3 is uncapped
   Groq: 8192,
-  HuggingFace: 4096,
-  Mistral: 8192,
+  HuggingFace: 8192,
+  Mistral: 16384,
   Ollama: 8192,
-  OpenRouter: 8192,
-  Perplexity: 8192,
-  Together: 8192,
-  xAI: 8192,
+  OpenRouter: 32768, // Generous fallback; dynamic models read actual limit from API
+  Perplexity: 16384,
+  Together: 16384,
+  xAI: 16384,
   LMStudio: 8192,
-  OpenAILike: 8192,
+  OpenAILike: 16384,
   AmazonBedrock: 8192,
   Hyperbolic: 8192,
 };
@@ -35,16 +37,11 @@ export const PROVIDER_COMPLETION_LIMITS: Record<string, number> = {
  * These models use internal reasoning tokens and have different API parameter requirements
  */
 export function isReasoningModel(modelName: string): boolean {
-  const result = /^(o1|o3|gpt-5)/i.test(modelName);
-
-  // DEBUG: Test regex matching
-  console.log(`REGEX TEST: "${modelName}" matches reasoning pattern: ${result}`);
-
-  return result;
+  return /^(o1|o3|gpt-5)/i.test(modelName);
 }
 
-// limits the number of model responses that can be returned in a single request
-export const MAX_RESPONSE_SEGMENTS = 2;
+// limits the number of continuation segments when a response hits the token limit
+export const MAX_RESPONSE_SEGMENTS = 4;
 
 export interface File {
   type: 'file';
