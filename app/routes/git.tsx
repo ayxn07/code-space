@@ -21,6 +21,7 @@ export default function Index() {
   return (
     <div className="flex flex-col h-full w-full bg-bolt-elements-background-depth-1">
       <BackgroundRays />
+      <BackgroundRays position="bottom-right" />
       <Header />
       <ClientOnly fallback={<BaseChat />}>{() => <GitUrlImport />}</ClientOnly>
     </div>

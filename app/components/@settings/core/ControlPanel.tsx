@@ -247,6 +247,7 @@ export const ControlPanel = ({ open, onClose }: ControlPanelProps) => {
             >
               <div className="absolute inset-0 overflow-hidden rounded-2xl">
                 <BackgroundRays />
+                <BackgroundRays position="bottom-right" />
               </div>
               <div className="relative z-10 flex flex-col h-full">
                 {/* Header */}
