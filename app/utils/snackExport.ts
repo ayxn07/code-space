@@ -27,7 +27,7 @@ const EXCLUDED_FILES = [
  */
 const EXPO_ECOSYSTEM_EXACT = new Set(['expo', 'react', 'react-dom', 'react-native', 'react-native-web', 'typescript']);
 
-const EXPO_ECOSYSTEM_PREFIXES = ['expo-', '@expo/', 'react-native-', '@react-native/', '@react-navigation/'];
+const EXPO_ECOSYSTEM_PREFIXES = ['expo-', '@expo/', '@react-native/'];
 
 function isExpoEcosystemPackage(name: string): boolean {
   if (EXPO_ECOSYSTEM_EXACT.has(name)) {
