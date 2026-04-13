@@ -89,6 +89,13 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
     return hasIndexHtml && !hasPackageJson;
   }, [filesStore]);
 
+  // Detect if project files exist (code has been written, npm install likely running)
+  const hasProjectFiles = useMemo(() => {
+    return Object.keys(filesStore).some(
+      (path) => path === `${WORK_DIR}/package.json` || path.endsWith('/package.json'),
+    );
+  }, [filesStore]);
+
   const handleStartStaticServer = useCallback(async () => {
     setIsStartingServer(true);
     setServerStartError(null);
@@ -1146,6 +1153,14 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
                         </p>
                       </>
                     )}
+                  </div>
+                ) : hasProjectFiles ? (
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="i-svg-spinners:90-ring-with-bg text-4xl text-bolt-elements-textSecondary" />
+                    <p className="text-sm text-bolt-elements-textSecondary">Setting up your project...</p>
+                    <p className="text-xs text-bolt-elements-textTertiary">
+                      Installing dependencies and starting the dev server
+                    </p>
                   </div>
                 ) : (
                   'No preview available'
