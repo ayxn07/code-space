@@ -2,6 +2,7 @@ import ignore from 'ignore';
 import type { ProviderInfo } from '~/types/model';
 import type { Template } from '~/types/template';
 import { STARTER_TEMPLATES } from './constants';
+import { detectProjectCommands } from './projectCommands';
 
 const starterTemplateSelectionPrompt = (templates: Template[]) => `
 You are an experienced developer who helps people choose the best starter template for their projects.
@@ -183,6 +184,19 @@ export async function getTemplates(templateName: string, title?: string) {
     filesToImport.ignoreFile = ignoredFiles;
   }
 
+  // Detect setup/start commands from template files
+  const commands = await detectProjectCommands(filesToImport.files);
+
+  let commandActions = '';
+
+  if (commands.setupCommand) {
+    commandActions += `\n<boltAction type="shell">${commands.setupCommand}</boltAction>`;
+  }
+
+  if (commands.startCommand) {
+    commandActions += `\n<boltAction type="start">${commands.startCommand}</boltAction>`;
+  }
+
   const assistantMessage = `
 Hack Cortex is initializing your project with the required files using the ${template.name} template.
 <boltArtifact id="imported-files" title="${title || 'Create initial files'}" type="bundled">
@@ -193,7 +207,7 @@ ${filesToImport.files
 ${file.content}
 </boltAction>`,
   )
-  .join('\n')}
+  .join('\n')}${commandActions}
 </boltArtifact>
 `;
   let userMessage = ``;
@@ -244,8 +258,6 @@ edit only the files that need to be changed, and you can create new files as nee
 NO NOT EDIT/WRITE ANY FILES THAT ALREADY EXIST IN THE PROJECT AND DOES NOT NEED TO BE MODIFIED
 ---
 Now that the Template is imported please continue with my original request
-
-IMPORTANT: Dont Forget to install the dependencies before running the app by using \`npm install && npm run dev\`
 `;
 
   return {
