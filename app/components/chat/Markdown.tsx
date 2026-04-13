@@ -172,12 +172,7 @@ export const Markdown = memo(
                   } else if (type === 'message' && append) {
                     append({
                       id: `quick-action-message-${Date.now()}`,
-                      content: [
-                        {
-                          type: 'text',
-                          text: `[Model: ${model}]\n\n[Provider: ${provider?.name}]\n\n${message}`,
-                        },
-                      ] as any,
+                      content: `[Model: ${model}]\n\n[Provider: ${provider?.name}]\n\n${message}`,
                       role: 'user',
                     });
                     console.log('Message appended:', message);
@@ -185,12 +180,7 @@ export const Markdown = memo(
                     setChatMode('build');
                     append({
                       id: `quick-action-implement-${Date.now()}`,
-                      content: [
-                        {
-                          type: 'text',
-                          text: `[Model: ${model}]\n\n[Provider: ${provider?.name}]\n\n${message}`,
-                        },
-                      ] as any,
+                      content: `[Model: ${model}]\n\n[Provider: ${provider?.name}]\n\n${message}`,
                       role: 'user',
                     });
                   } else if (type === 'link' && typeof href === 'string') {
@@ -232,12 +222,7 @@ export const Markdown = memo(
                     if (append) {
                       append({
                         id: `poll-answer-${Date.now()}`,
-                        content: [
-                          {
-                            type: 'text',
-                            text: `[Model: ${model}]\n\n[Provider: ${provider?.name}]\n\n${value}`,
-                          },
-                        ] as any,
+                        content: `[Model: ${model}]\n\n[Provider: ${provider?.name}]\n\n${value}`,
                         role: 'user',
                       });
                     }

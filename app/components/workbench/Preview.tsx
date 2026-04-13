@@ -9,6 +9,7 @@ import { ExpoQrModal } from '~/components/workbench/ExpoQrModal';
 import type { ElementInfo } from './Inspector';
 import { webcontainer } from '~/lib/webcontainer';
 import { WORK_DIR } from '~/utils/constants';
+import { isExpoProject, exportToExpoSnack } from '~/utils/snackExport';
 
 type ResizeSide = 'left' | 'right' | null;
 
@@ -139,6 +140,9 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const [showDeviceFrameInPreview, setShowDeviceFrameInPreview] = useState(false);
   const expoUrl = useStore(expoUrlAtom);
   const [isExpoQrModalOpen, setIsExpoQrModalOpen] = useState(false);
+  const [isExportingToSnack, setIsExportingToSnack] = useState(false);
+
+  const isExpo = useMemo(() => isExpoProject(filesStore), [filesStore]);
 
   useEffect(() => {
     if (!activePreview) {
@@ -710,6 +714,23 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
     }
   };
 
+  const handleExportToSnack = useCallback(async () => {
+    if (isExportingToSnack) {
+      return;
+    }
+
+    setIsExportingToSnack(true);
+
+    try {
+      const url = await exportToExpoSnack(filesStore);
+      window.open(url, '_blank');
+    } catch (error: any) {
+      console.error('[Preview] Failed to export to Expo Snack:', error);
+    } finally {
+      setIsExportingToSnack(false);
+    }
+  }, [filesStore, isExportingToSnack]);
+
   return (
     <div ref={containerRef} className={`w-full h-full flex flex-col relative`}>
       {isPortDropdownOpen && (
@@ -774,6 +795,15 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
           {expoUrl && <IconButton icon="i-ph:qr-code" onClick={() => setIsExpoQrModalOpen(true)} title="Show QR" />}
 
           <ExpoQrModal open={isExpoQrModalOpen} onClose={() => setIsExpoQrModalOpen(false)} />
+
+          {isExpo && (
+            <IconButton
+              icon={isExportingToSnack ? 'i-svg-spinners:90-ring-with-bg' : 'i-ph:rocket-launch'}
+              onClick={handleExportToSnack}
+              title="Open in Expo Snack"
+              disabled={isExportingToSnack}
+            />
+          )}
 
           {isDeviceModeOn && (
             <>
