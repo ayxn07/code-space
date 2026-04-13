@@ -4,7 +4,6 @@ import { classNames } from '~/utils/classNames';
 import { createScopedLogger, renderLogger } from '~/utils/logger';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import type { FileHistory } from '~/types/actions';
-import { diffLines, type Change } from 'diff';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { toast } from 'react-toastify';
 import { path } from '~/utils/path';
@@ -126,21 +125,26 @@ export const FileTree = memo(
       });
     };
 
-    const onCopyPath = (fileOrFolder: FileNode | FolderNode) => {
-      try {
-        navigator.clipboard.writeText(fileOrFolder.fullPath);
-      } catch (error) {
-        logger.error(error);
-      }
-    };
+    const handleFileClick = useCallback((fullPath: string) => onFileSelect?.(fullPath), [onFileSelect]);
 
-    const onCopyRelativePath = (fileOrFolder: FileNode | FolderNode) => {
+    const handleCopyPath = useCallback((fullPath: string) => {
       try {
-        navigator.clipboard.writeText(fileOrFolder.fullPath.substring((rootFolder || '').length));
+        navigator.clipboard.writeText(fullPath);
       } catch (error) {
         logger.error(error);
       }
-    };
+    }, []);
+
+    const handleCopyRelativePath = useCallback(
+      (fullPath: string) => {
+        try {
+          navigator.clipboard.writeText(fullPath.substring((rootFolder || '').length));
+        } catch (error) {
+          logger.error(error);
+        }
+      },
+      [rootFolder],
+    );
 
     return (
       <div className={classNames('text-sm', className, 'overflow-y-auto modern-scrollbar')}>
@@ -154,15 +158,9 @@ export const FileTree = memo(
                   file={fileOrFolder}
                   unsavedChanges={unsavedFiles instanceof Set && unsavedFiles.has(fileOrFolder.fullPath)}
                   fileHistory={fileHistory}
-                  onCopyPath={() => {
-                    onCopyPath(fileOrFolder);
-                  }}
-                  onCopyRelativePath={() => {
-                    onCopyRelativePath(fileOrFolder);
-                  }}
-                  onClick={() => {
-                    onFileSelect?.(fileOrFolder.fullPath);
-                  }}
+                  onCopyPath={handleCopyPath}
+                  onCopyRelativePath={handleCopyRelativePath}
+                  onClick={handleFileClick}
                 />
               );
             }
@@ -173,15 +171,9 @@ export const FileTree = memo(
                   folder={fileOrFolder}
                   selected={allowFolderSelection && selectedFile === fileOrFolder.fullPath}
                   collapsed={collapsedFolders.has(fileOrFolder.fullPath)}
-                  onCopyPath={() => {
-                    onCopyPath(fileOrFolder);
-                  }}
-                  onCopyRelativePath={() => {
-                    onCopyRelativePath(fileOrFolder);
-                  }}
-                  onClick={() => {
-                    toggleCollapseState(fileOrFolder.fullPath);
-                  }}
+                  onCopyPath={handleCopyPath}
+                  onCopyRelativePath={handleCopyRelativePath}
+                  onClick={toggleCollapseState}
                 />
               );
             }
@@ -201,9 +193,9 @@ interface FolderProps {
   folder: FolderNode;
   collapsed: boolean;
   selected?: boolean;
-  onCopyPath: () => void;
-  onCopyRelativePath: () => void;
-  onClick: () => void;
+  onCopyPath: (fullPath: string) => void;
+  onCopyRelativePath: (fullPath: string) => void;
+  onClick: (fullPath: string) => void;
 }
 
 interface FolderContextMenuProps {
@@ -587,12 +579,19 @@ function FileContextMenu({
   );
 }
 
-function Folder({ folder, collapsed, selected = false, onCopyPath, onCopyRelativePath, onClick }: FolderProps) {
+const Folder = memo(({ folder, collapsed, selected = false, onCopyPath, onCopyRelativePath, onClick }: FolderProps) => {
   // Check if the folder is locked
   const { isLocked } = workbenchStore.isFolderLocked(folder.fullPath);
 
+  const handleClick = useCallback(() => onClick(folder.fullPath), [onClick, folder.fullPath]);
+  const handleCopyPath = useCallback(() => onCopyPath(folder.fullPath), [onCopyPath, folder.fullPath]);
+  const handleCopyRelativePath = useCallback(
+    () => onCopyRelativePath(folder.fullPath),
+    [onCopyRelativePath, folder.fullPath],
+  );
+
   return (
-    <FileContextMenu onCopyPath={onCopyPath} onCopyRelativePath={onCopyRelativePath} fullPath={folder.fullPath}>
+    <FileContextMenu onCopyPath={handleCopyPath} onCopyRelativePath={handleCopyRelativePath} fullPath={folder.fullPath}>
       <NodeButton
         className={classNames('group', {
           'bg-transparent text-bolt-elements-item-contentDefault hover:text-bolt-elements-item-contentActive hover:bg-bolt-elements-item-backgroundActive':
@@ -604,7 +603,7 @@ function Folder({ folder, collapsed, selected = false, onCopyPath, onCopyRelativ
           'i-ph:caret-right scale-98': collapsed,
           'i-ph:caret-down scale-98': !collapsed,
         })}
-        onClick={onClick}
+        onClick={handleClick}
       >
         <div className="flex items-center w-full">
           <div className="flex-1 truncate pr-2">{folder.name}</div>
@@ -618,111 +617,107 @@ function Folder({ folder, collapsed, selected = false, onCopyPath, onCopyRelativ
       </NodeButton>
     </FileContextMenu>
   );
-}
+});
 
 interface FileProps {
   file: FileNode;
   selected: boolean;
   unsavedChanges?: boolean;
   fileHistory?: Record<string, FileHistory>;
-  onCopyPath: () => void;
-  onCopyRelativePath: () => void;
-  onClick: () => void;
+  onCopyPath: (fullPath: string) => void;
+  onCopyRelativePath: (fullPath: string) => void;
+  onClick: (fullPath: string) => void;
 }
 
-function File({
-  file,
-  onClick,
-  onCopyPath,
-  onCopyRelativePath,
-  selected,
-  unsavedChanges = false,
-  fileHistory = {},
-}: FileProps) {
-  const { depth, name, fullPath } = file;
+const File = memo(
+  ({
+    file,
+    onClick,
+    onCopyPath,
+    onCopyRelativePath,
+    selected,
+    unsavedChanges = false,
+    fileHistory = {},
+  }: FileProps) => {
+    const { depth, name, fullPath } = file;
 
-  // Check if the file is locked
-  const { locked } = workbenchStore.isFileLocked(fullPath);
+    // Check if the file is locked
+    const { locked } = workbenchStore.isFileLocked(fullPath);
 
-  const fileModifications = fileHistory[fullPath];
+    const fileModifications = fileHistory[fullPath];
 
-  const { additions, deletions } = useMemo(() => {
-    if (!fileModifications?.originalContent) {
-      return { additions: 0, deletions: 0 };
-    }
+    /*
+     * Fast line-count diff — O(n) instead of the O(n²) diffLines algorithm.
+     * The file tree only needs a rough +/- indicator, not a precise diff.
+     */
+    const { additions, deletions } = useMemo(() => {
+      if (!fileModifications?.originalContent) {
+        return { additions: 0, deletions: 0 };
+      }
 
-    const normalizedOriginal = fileModifications.originalContent.replace(/\r\n/g, '\n');
-    const normalizedCurrent =
-      fileModifications.versions[fileModifications.versions.length - 1]?.content.replace(/\r\n/g, '\n') || '';
+      const currentContent = fileModifications.versions[fileModifications.versions.length - 1]?.content || '';
 
-    if (normalizedOriginal === normalizedCurrent) {
-      return { additions: 0, deletions: 0 };
-    }
+      if (fileModifications.originalContent === currentContent) {
+        return { additions: 0, deletions: 0 };
+      }
 
-    const changes = diffLines(normalizedOriginal, normalizedCurrent, {
-      newlineIsToken: false,
-      ignoreWhitespace: true,
-      ignoreCase: false,
-    });
+      const origLines = fileModifications.originalContent.split('\n').length;
+      const currLines = currentContent.split('\n').length;
+      const diff = currLines - origLines;
 
-    return changes.reduce(
-      (acc: { additions: number; deletions: number }, change: Change) => {
-        if (change.added) {
-          acc.additions += change.value.split('\n').length;
-        }
+      return {
+        additions: diff > 0 ? diff : currLines !== origLines ? 1 : 0,
+        deletions: diff < 0 ? -diff : currLines !== origLines ? 1 : 0,
+      };
+    }, [fileModifications]);
 
-        if (change.removed) {
-          acc.deletions += change.value.split('\n').length;
-        }
+    const showStats = additions > 0 || deletions > 0;
 
-        return acc;
-      },
-      { additions: 0, deletions: 0 },
-    );
-  }, [fileModifications]);
+    const handleClick = useCallback(() => onClick(fullPath), [onClick, fullPath]);
+    const handleCopyPath = useCallback(() => onCopyPath(fullPath), [onCopyPath, fullPath]);
+    const handleCopyRelativePath = useCallback(() => onCopyRelativePath(fullPath), [onCopyRelativePath, fullPath]);
 
-  const showStats = additions > 0 || deletions > 0;
-
-  return (
-    <FileContextMenu onCopyPath={onCopyPath} onCopyRelativePath={onCopyRelativePath} fullPath={fullPath}>
-      <NodeButton
-        className={classNames('group', {
-          'bg-transparent hover:bg-bolt-elements-item-backgroundActive text-bolt-elements-item-contentDefault':
-            !selected,
-          'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent': selected,
-        })}
-        depth={depth}
-        iconClasses={classNames('i-ph:file-duotone scale-98', {
-          'group-hover:text-bolt-elements-item-contentActive': !selected,
-        })}
-        onClick={onClick}
-      >
-        <div
-          className={classNames('flex items-center', {
+    return (
+      <FileContextMenu onCopyPath={handleCopyPath} onCopyRelativePath={handleCopyRelativePath} fullPath={fullPath}>
+        <NodeButton
+          className={classNames('group', {
+            'bg-transparent hover:bg-bolt-elements-item-backgroundActive text-bolt-elements-item-contentDefault':
+              !selected,
+            'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent': selected,
+          })}
+          depth={depth}
+          iconClasses={classNames('i-ph:file-duotone scale-98', {
             'group-hover:text-bolt-elements-item-contentActive': !selected,
           })}
+          onClick={handleClick}
         >
-          <div className="flex-1 truncate pr-2">{name}</div>
-          <div className="flex items-center gap-1">
-            {showStats && (
-              <div className="flex items-center gap-1 text-xs">
-                {additions > 0 && <span className="text-green-500">+{additions}</span>}
-                {deletions > 0 && <span className="text-red-500">-{deletions}</span>}
-              </div>
-            )}
-            {locked && (
-              <span
-                className={classNames('shrink-0', 'i-ph:lock-simple scale-80 text-red-500')}
-                title={'File is locked'}
-              />
-            )}
-            {unsavedChanges && <span className="i-ph:circle-fill scale-68 shrink-0 text-orange-500" />}
+          <div
+            className={classNames('flex items-center', {
+              'group-hover:text-bolt-elements-item-contentActive': !selected,
+            })}
+          >
+            <div className="flex-1 truncate pr-2">{name}</div>
+            <div className="flex items-center gap-1">
+              {showStats && (
+                <div className="flex items-center gap-1 text-xs">
+                  {additions > 0 && <span className="text-green-500">+{additions}</span>}
+                  {deletions > 0 && <span className="text-red-500">-{deletions}</span>}
+                </div>
+              )}
+              {locked && (
+                <span
+                  className={classNames('shrink-0', 'i-ph:lock-simple scale-80 text-red-500')}
+                  title={'File is locked'}
+                />
+              )}
+              {unsavedChanges && <span className="i-ph:circle-fill scale-68 shrink-0 text-orange-500" />}
+            </div>
           </div>
-        </div>
-      </NodeButton>
-    </FileContextMenu>
-  );
-}
+        </NodeButton>
+      </FileContextMenu>
+    );
+  },
+);
 
 interface ButtonProps {
   depth: number;

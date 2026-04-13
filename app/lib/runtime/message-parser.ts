@@ -390,8 +390,18 @@ export class StreamingMessageParser {
     return actionAttributes as FileAction | ShellAction;
   }
 
+  #attrRegexCache = new Map<string, RegExp>();
+
   #extractAttribute(tag: string, attributeName: string): string | undefined {
-    const match = tag.match(new RegExp(`${attributeName}="([^"]*)"`, 'i'));
+    let regex = this.#attrRegexCache.get(attributeName);
+
+    if (!regex) {
+      regex = new RegExp(`${attributeName}="([^"]*)"`, 'i');
+      this.#attrRegexCache.set(attributeName, regex);
+    }
+
+    const match = tag.match(regex);
+
     return match ? match[1] : undefined;
   }
 }

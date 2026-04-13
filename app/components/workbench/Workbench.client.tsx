@@ -74,6 +74,60 @@ const workbenchVariants = {
   },
 } satisfies Variants;
 
+// Stable computed store — created once at module level, not on every render
+const hasPreviewComputed = computed(workbenchStore.previews, (previews) => previews.length > 0);
+
+/**
+ * Memoized diff stats for a single file history entry.
+ * Avoids running the expensive diffLines() O(n²) algorithm inline in JSX.
+ */
+const DiffStats = memo(({ history }: { history: FileHistory }) => {
+  const { additions, deletions } = useMemo(() => {
+    if (!history.originalContent) {
+      return { additions: 0, deletions: 0 };
+    }
+
+    const normalizedOriginal = history.originalContent.replace(/\r\n/g, '\n');
+    const normalizedCurrent = history.versions[history.versions.length - 1]?.content.replace(/\r\n/g, '\n') || '';
+
+    if (normalizedOriginal === normalizedCurrent) {
+      return { additions: 0, deletions: 0 };
+    }
+
+    const changes = diffLines(normalizedOriginal, normalizedCurrent, {
+      newlineIsToken: false,
+      ignoreWhitespace: true,
+      ignoreCase: false,
+    });
+
+    return changes.reduce(
+      (acc: { additions: number; deletions: number }, change: Change) => {
+        if (change.added) {
+          acc.additions += change.value.split('\n').length;
+        }
+
+        if (change.removed) {
+          acc.deletions += change.value.split('\n').length;
+        }
+
+        return acc;
+      },
+      { additions: 0, deletions: 0 },
+    );
+  }, [history]);
+
+  if (additions === 0 && deletions === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex items-center gap-1 text-xs shrink-0">
+      {additions > 0 && <span className="text-green-500">+{additions}</span>}
+      {deletions > 0 && <span className="text-red-500">-{deletions}</span>}
+    </div>
+  );
+});
+
 const FileModifiedDropdown = memo(
   ({
     fileHistory,
@@ -182,57 +236,7 @@ const FileModifiedDropdown = memo(
                                         {filePath}
                                       </span>
                                     </div>
-                                    {(() => {
-                                      // Calculate diff stats
-                                      const { additions, deletions } = (() => {
-                                        if (!history.originalContent) {
-                                          return { additions: 0, deletions: 0 };
-                                        }
-
-                                        const normalizedOriginal = history.originalContent.replace(/\r\n/g, '\n');
-                                        const normalizedCurrent =
-                                          history.versions[history.versions.length - 1]?.content.replace(
-                                            /\r\n/g,
-                                            '\n',
-                                          ) || '';
-
-                                        if (normalizedOriginal === normalizedCurrent) {
-                                          return { additions: 0, deletions: 0 };
-                                        }
-
-                                        const changes = diffLines(normalizedOriginal, normalizedCurrent, {
-                                          newlineIsToken: false,
-                                          ignoreWhitespace: true,
-                                          ignoreCase: false,
-                                        });
-
-                                        return changes.reduce(
-                                          (acc: { additions: number; deletions: number }, change: Change) => {
-                                            if (change.added) {
-                                              acc.additions += change.value.split('\n').length;
-                                            }
-
-                                            if (change.removed) {
-                                              acc.deletions += change.value.split('\n').length;
-                                            }
-
-                                            return acc;
-                                          },
-                                          { additions: 0, deletions: 0 },
-                                        );
-                                      })();
-
-                                      const showStats = additions > 0 || deletions > 0;
-
-                                      return (
-                                        showStats && (
-                                          <div className="flex items-center gap-1 text-xs shrink-0">
-                                            {additions > 0 && <span className="text-green-500">+{additions}</span>}
-                                            {deletions > 0 && <span className="text-red-500">-{deletions}</span>}
-                                          </div>
-                                        )
-                                      );
-                                    })()}
+                                    <DiffStats history={history} />
                                   </div>
                                 </div>
                               </div>
@@ -294,7 +298,7 @@ export const Workbench = memo(
 
     // const modifiedFiles = Array.from(useStore(workbenchStore.unsavedFiles).keys());
 
-    const hasPreview = useStore(computed(workbenchStore.previews, (previews) => previews.length > 0));
+    const hasPreview = useStore(hasPreviewComputed);
     const showWorkbench = useStore(workbenchStore.showWorkbench);
     const selectedFile = useStore(workbenchStore.selectedFile);
     const currentDocument = useStore(workbenchStore.currentDocument);

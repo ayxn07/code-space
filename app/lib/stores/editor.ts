@@ -34,30 +34,44 @@ export class EditorStore {
 
   setDocuments(files: FileMap) {
     const previousDocuments = this.documents.value;
+    const newDocuments: EditorDocuments = {};
+    let hasChanges = false;
 
-    this.documents.set(
-      Object.fromEntries<EditorDocument>(
-        Object.entries(files)
-          .map(([filePath, dirent]) => {
-            if (dirent === undefined || dirent.type !== 'file') {
-              return undefined;
-            }
+    for (const [filePath, dirent] of Object.entries(files)) {
+      if (dirent === undefined || dirent.type !== 'file') {
+        continue;
+      }
 
-            const previousDocument = previousDocuments?.[filePath];
+      const prev = previousDocuments?.[filePath];
 
-            return [
-              filePath,
-              {
-                value: dirent.content,
-                filePath,
-                isBinary: dirent.isBinary, // Add this line
-                scroll: previousDocument?.scroll,
-              },
-            ] as [string, EditorDocument];
-          })
-          .filter(Boolean) as Array<[string, EditorDocument]>,
-      ),
-    );
+      // Reuse existing document object if content hasn't changed
+      if (prev && prev.value === dirent.content && prev.isBinary === dirent.isBinary) {
+        newDocuments[filePath] = prev;
+      } else {
+        hasChanges = true;
+        newDocuments[filePath] = {
+          value: dirent.content,
+          filePath,
+          isBinary: dirent.isBinary,
+          scroll: prev?.scroll,
+        };
+      }
+    }
+
+    // Also detect removed files
+    if (!hasChanges && previousDocuments) {
+      for (const key of Object.keys(previousDocuments)) {
+        if (!(key in newDocuments)) {
+          hasChanges = true;
+          break;
+        }
+      }
+    }
+
+    // Skip store update entirely if nothing changed
+    if (hasChanges || !previousDocuments) {
+      this.documents.set(newDocuments);
+    }
   }
 
   setSelectedFile(filePath: string | undefined) {

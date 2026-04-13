@@ -1,7 +1,7 @@
 import { useStore } from '@nanostores/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { computed } from 'nanostores';
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createHighlighter, type BundledLanguage, type BundledTheme, type HighlighterGeneric } from 'shiki';
 import type { ActionState } from '~/lib/runtime/action-runner';
 import { workbenchStore } from '~/lib/stores/workbench';
@@ -34,36 +34,46 @@ export const Artifact = memo(({ artifactId }: ArtifactProps) => {
   const artifacts = useStore(workbenchStore.artifacts);
   const artifact = artifacts[artifactId];
 
-  const actions = useStore(
-    computed(artifact.runner.actions, (actions) => {
-      // Filter out Supabase actions except for migrations
-      return Object.values(actions).filter((action) => {
-        // Exclude actions with type 'supabase' or actions that contain 'supabase' in their content
-        return action.type !== 'supabase' && !(action.type === 'shell' && action.content?.includes('supabase'));
-      });
-    }),
+  // Stable computed store — useMemo ensures we don't create a new one on every render
+  const filteredActions = useMemo(
+    () =>
+      computed(artifact.runner.actions, (actions) => {
+        return Object.values(actions).filter((action) => {
+          return action.type !== 'supabase' && !(action.type === 'shell' && action.content?.includes('supabase'));
+        });
+      }),
+    [artifact.runner.actions],
   );
+
+  const actions = useStore(filteredActions);
 
   const toggleActions = () => {
     userToggledActions.current = true;
     setShowActions(!showActions);
   };
 
+  // Derive completion status from actions without an effect to avoid extra render cycles
+  const actionsFinished = useMemo(() => {
+    if (actions.length === 0 || artifact.type !== 'bundled') {
+      return false;
+    }
+
+    return !actions.find(
+      (action) => action.status !== 'complete' && !(action.type === 'start' && action.status === 'running'),
+    );
+  }, [actions, artifact.type]);
+
   useEffect(() => {
     if (actions.length && !showActions && !userToggledActions.current) {
       setShowActions(true);
     }
+  }, [actions.length]);
 
-    if (actions.length !== 0 && artifact.type === 'bundled') {
-      const finished = !actions.find(
-        (action) => action.status !== 'complete' && !(action.type === 'start' && action.status === 'running'),
-      );
-
-      if (allActionFinished !== finished) {
-        setAllActionFinished(finished);
-      }
+  useEffect(() => {
+    if (allActionFinished !== actionsFinished) {
+      setAllActionFinished(actionsFinished);
     }
-  }, [actions, artifact.type, allActionFinished]);
+  }, [actionsFinished]);
 
   // Determine the dynamic title based on state for bundled artifacts
   const dynamicTitle =
