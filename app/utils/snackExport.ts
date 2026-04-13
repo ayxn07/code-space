@@ -250,7 +250,7 @@ function buildSnackFiles(files: FileMap, parsedPkgJson: any): Record<string, { t
 
     snackFiles[relativePath] = {
       type: 'CODE',
-      contents: dirent.content,
+      contents: rewritePathAliases(dirent.content, relativePath),
     };
   }
 
@@ -314,6 +314,57 @@ function shouldExclude(relativePath: string): boolean {
   }
 
   return EXCLUDED_FILES.includes(relativePath);
+}
+
+/**
+ * Rewrites `@/` path aliases to relative imports.
+ * Expo/RN projects commonly use `@/*` mapped to the project root (`./*`).
+ * Snack's bundler doesn't support tsconfig path aliases, so we convert them
+ * to relative paths based on the file's location in the project tree.
+ *
+ * e.g. in `app/_layout.tsx`: `@/hooks/useFrameworkReady` → `../hooks/useFrameworkReady`
+ */
+function rewritePathAliases(content: string, filePath: string): string {
+  /*
+   * Match import/require statements using @/ alias.
+   * Handles: import X from '@/...', import '@/...', require('@/...'), export X from '@/...'
+   */
+  return content.replace(
+    /(from\s+['"])@\/(.*?)(['"])|((require|import)\s*\(\s*['"])@\/(.*?)(['"]\s*\))/g,
+    (_match, fromPrefix, fromPath, fromSuffix, _reqFull, _reqKeyword, reqPrefix, reqPath, reqSuffix) => {
+      if (fromPrefix) {
+        const relativePath = resolveAliasToRelative(filePath, fromPath);
+
+        return `${fromPrefix}${relativePath}${fromSuffix}`;
+      }
+
+      const relativePath = resolveAliasToRelative(filePath, reqPath);
+
+      return `${reqPrefix}${relativePath}${reqSuffix}`;
+    },
+  );
+}
+
+/**
+ * Converts a `@/`-relative path to a file-relative path.
+ * `@/` maps to project root, so we compute the relative traversal from the file's directory.
+ */
+function resolveAliasToRelative(fromFile: string, targetPath: string): string {
+  // Get directory depth of the source file (e.g. "app/_layout.tsx" → ["app"])
+  const parts = fromFile.split('/');
+  parts.pop(); // remove filename
+
+  const depth = parts.length;
+
+  if (depth === 0) {
+    // File is at project root — @/foo → ./foo
+    return `./${targetPath}`;
+  }
+
+  // File is nested — go up `depth` levels then into target
+  const up = Array(depth).fill('..').join('/');
+
+  return `${up}/${targetPath}`;
 }
 
 /**
