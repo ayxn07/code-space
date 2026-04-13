@@ -4,8 +4,6 @@ import { IconButton } from '~/components/ui/IconButton';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { PortDropdown } from './PortDropdown';
 import { ScreenshotSelector } from './ScreenshotSelector';
-import { expoUrlAtom } from '~/lib/stores/qrCodeStore';
-import { ExpoQrModal } from '~/components/workbench/ExpoQrModal';
 import type { ElementInfo } from './Inspector';
 import { webcontainer } from '~/lib/webcontainer';
 import { WORK_DIR } from '~/utils/constants';
@@ -139,8 +137,6 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const [isLandscape, setIsLandscape] = useState(false);
   const [showDeviceFrame, setShowDeviceFrame] = useState(true);
   const [showDeviceFrameInPreview, setShowDeviceFrameInPreview] = useState(false);
-  const expoUrl = useStore(expoUrlAtom);
-  const [isExpoQrModalOpen, setIsExpoQrModalOpen] = useState(false);
   const [isExportingToSnack, setIsExportingToSnack] = useState(false);
 
   const isExpo = useMemo(() => isExpoProject(filesStore), [filesStore]);
@@ -794,10 +790,6 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
             onClick={toggleDeviceMode}
             title={isDeviceModeOn ? 'Switch to Responsive Mode' : 'Switch to Device Mode'}
           />
-
-          {expoUrl && <IconButton icon="i-ph:qr-code" onClick={() => setIsExpoQrModalOpen(true)} title="Show QR" />}
-
-          <ExpoQrModal open={isExpoQrModalOpen} onClose={() => setIsExpoQrModalOpen(false)} />
 
           {isExpo && (
             <IconButton

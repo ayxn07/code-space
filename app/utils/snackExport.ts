@@ -20,6 +20,24 @@ const EXCLUDED_FILES = [
 ];
 
 /**
+ * Expo ecosystem package names and prefixes.
+ * These are provided automatically by Snack for the selected SDK version,
+ * so we must NOT send them with template-specific version constraints
+ * (which may be incompatible with the Snack SDK version).
+ */
+const EXPO_ECOSYSTEM_EXACT = new Set(['expo', 'react', 'react-dom', 'react-native', 'react-native-web', 'typescript']);
+
+const EXPO_ECOSYSTEM_PREFIXES = ['expo-', '@expo/', 'react-native-', '@react-native/', '@react-navigation/'];
+
+function isExpoEcosystemPackage(name: string): boolean {
+  if (EXPO_ECOSYSTEM_EXACT.has(name)) {
+    return true;
+  }
+
+  return EXPO_ECOSYSTEM_PREFIXES.some((prefix) => name.startsWith(prefix));
+}
+
+/**
  * Checks whether the current project in the FileMap is an Expo project
  * by looking for "expo" in package.json dependencies.
  */
@@ -80,12 +98,31 @@ export async function exportToExpoSnack(files: FileMap): Promise<string> {
     };
   }
 
-  // Extract dependencies with versions
+  /*
+   * Inject App.js for expo-router projects that don't have one.
+   * Snack requires App.js as the entry point.
+   */
   const allDeps = { ...parsed.dependencies, ...parsed.devDependencies };
+  const usesExpoRouter = 'expo-router' in allDeps;
+
+  if (usesExpoRouter && !snackFiles['App.js'] && !snackFiles['App.tsx']) {
+    snackFiles['App.js'] = {
+      type: 'CODE',
+      contents: "import 'expo-router/entry';\n",
+    };
+  }
+
+  /*
+   * Extract ONLY non-Expo-ecosystem dependencies.
+   * Snack provides Expo ecosystem packages (expo-*, react-native-*, etc.)
+   * automatically for the selected SDK version. Sending them with
+   * template-specific versions causes snackager resolution failures
+   * when the project SDK (e.g. 55) is newer than what snack-sdk supports (e.g. 54).
+   */
   const snackDependencies: Record<string, { version: string }> = {};
 
   for (const [name, version] of Object.entries(allDeps)) {
-    if (typeof version === 'string') {
+    if (typeof version === 'string' && !isExpoEcosystemPackage(name)) {
       snackDependencies[name] = { version };
     }
   }
