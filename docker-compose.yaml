@@ -80,7 +80,7 @@ services:
     profiles: ['development', 'default']
 
   app-prebuild:
-    image: ghcr.io/ayxn07/hackcortex:latest
+    image: ghcr.io/ayxn07/code-space:latest
     ports:
       - '5173:5173'
     environment:
