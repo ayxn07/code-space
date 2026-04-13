@@ -259,3 +259,8 @@
   --bolt-elements-terminal-color-brightCyan: var(--bolt-terminal-brightCyan);
   --bolt-elements-terminal-color-brightWhite: var(--bolt-terminal-brightWhite);
 }
+
+/* Disable transitions during panel resize drag for snappy feel */
+:root[data-resizing] * {
+  transition-duration: 0ms !important;
+}

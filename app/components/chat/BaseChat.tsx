@@ -3,7 +3,7 @@
  * Preventing TS checks with files presented in the video for a better presentation.
  */
 import type { JSONValue, Message } from 'ai';
-import React, { type RefCallback, useEffect, useState } from 'react';
+import React, { type RefCallback, useCallback, useEffect, useRef, useState } from 'react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
 import { Workbench } from '~/components/workbench/Workbench.client';
@@ -152,6 +152,75 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const showWorkbench = useStore(workbenchStore.showWorkbench);
     const filesCount = useStore(workbenchStore.files);
     const hasFiles = Object.keys(filesCount).length > 0;
+
+    const flexRowRef = useRef<HTMLDivElement>(null);
+    const isDraggingRef = useRef(false);
+
+    // Initialize --chat-min-width from localStorage on mount
+    useEffect(() => {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('chatPanelWidth');
+
+        if (saved) {
+          const width = parseInt(saved, 10);
+
+          if (!isNaN(width) && width >= 400) {
+            document.documentElement.style.setProperty('--chat-min-width', `${width}px`);
+          }
+        }
+      }
+    }, []);
+
+    const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+      e.preventDefault();
+      isDraggingRef.current = true;
+      document.documentElement.dataset.resizing = 'true';
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      const onMouseMove = (moveEvent: MouseEvent) => {
+        if (!isDraggingRef.current || !flexRowRef.current) {
+          return;
+        }
+
+        const containerRect = flexRowRef.current.getBoundingClientRect();
+        const containerWidth = containerRect.width;
+        let newChatWidth = moveEvent.clientX - containerRect.left;
+
+        // Constraints: min 400px, max 65% of container
+        const minWidth = 400;
+        const maxWidth = containerWidth * 0.65;
+        newChatWidth = Math.max(minWidth, Math.min(maxWidth, newChatWidth));
+
+        document.documentElement.style.setProperty('--chat-min-width', `${newChatWidth}px`);
+      };
+
+      const onMouseUp = () => {
+        isDraggingRef.current = false;
+        delete document.documentElement.dataset.resizing;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+
+        // Persist to localStorage
+        const currentWidth = getComputedStyle(document.documentElement).getPropertyValue('--chat-min-width').trim();
+        const numericWidth = parseInt(currentWidth, 10);
+
+        if (!isNaN(numericWidth)) {
+          localStorage.setItem('chatPanelWidth', String(numericWidth));
+        }
+
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      };
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    }, []);
+
+    const handleResizeDoubleClick = useCallback(() => {
+      document.documentElement.style.setProperty('--chat-min-width', '533px');
+      localStorage.removeItem('chatPanelWidth');
+    }, []);
 
     useEffect(() => {
       if (expoUrl) {
@@ -354,7 +423,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         data-chat-visible={showChat}
       >
         <ClientOnly>{() => <Menu />}</ClientOnly>
-        <div className="flex flex-col lg:flex-row overflow-y-auto w-full h-full">
+        <div ref={flexRowRef} className="flex flex-col lg:flex-row overflow-y-auto w-full h-full">
           <div className={classNames(styles.Chat, 'flex flex-col flex-grow lg:min-w-[var(--chat-min-width)] h-full')}>
             {!chatStarted && (
               <div id="intro" className="mt-[16vh] max-w-2xl mx-auto text-center px-4 lg:px-0">
@@ -510,6 +579,17 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
               </div>
             </div>
           </div>
+          {/* Drag handle for resizing chat/workbench panels */}
+          {chatStarted && showWorkbench && (
+            <div
+              className="hidden lg:flex items-center justify-center w-[6px] shrink-0 cursor-col-resize group hover:bg-bolt-elements-borderColor/50 active:bg-accent-500/30 transition-colors"
+              onMouseDown={handleResizeMouseDown}
+              onDoubleClick={handleResizeDoubleClick}
+              title="Drag to resize. Double-click to reset."
+            >
+              <div className="w-[2px] h-8 rounded-full bg-bolt-elements-borderColor group-hover:bg-accent-500 group-active:bg-accent-500 transition-colors" />
+            </div>
+          )}
           <ClientOnly>
             {() => (
               <Workbench chatStarted={chatStarted} isStreaming={isStreaming} setSelectedElement={setSelectedElement} />
