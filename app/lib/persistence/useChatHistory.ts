@@ -16,6 +16,7 @@ import {
   createChatFromMessages,
   getSnapshot,
   setSnapshot,
+  updateChatDescription,
   type IChatMetadata,
 } from './db';
 import { isPersistenceAvailable, waitForPersistence, apiUploadSnapshot, apiDownloadSnapshot } from './api-client';
@@ -325,6 +326,54 @@ function resetSnapshotUploadState(): void {
   }
 
   _pendingSnapshotUpload = null;
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * AI title generation — fire-and-forget background call to /api/chat-title
+ * ---------------------------------------------------------------------------
+ * Called when the first user message is saved. Sends the user's prompt to
+ * the server, which uses the same model/provider to generate a concise
+ * 3-8 word title via generateText(). If the API call fails or returns
+ * nothing, the pre-set truncated fallback title is left in place.
+ * ---------------------------------------------------------------------------
+ */
+
+async function generateAITitle(userText: string, model?: string, provider?: string): Promise<void> {
+  try {
+    const resp = await fetch('/api/chat-title', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: userText, model, provider }),
+    });
+
+    if (!resp.ok) {
+      console.warn(`[generateAITitle] API returned ${resp.status}, keeping fallback title.`);
+      return;
+    }
+
+    const data = (await resp.json()) as { title?: string };
+
+    if (data.title && data.title.trim()) {
+      const newTitle = data.title.trim();
+      description.set(newTitle);
+
+      /*
+       * Persist the AI-generated title to the backend. The initial
+       * debounced save may have already fired with the fallback title,
+       * so we explicitly update the chat title here.
+       */
+      const currentChatId = chatId.get();
+
+      if (currentChatId && db) {
+        updateChatDescription(db as IDBDatabase, currentChatId, newTitle).catch((err) =>
+          console.warn('[generateAITitle] Failed to persist AI title to backend:', err),
+        );
+      }
+    }
+  } catch (error) {
+    console.warn('[generateAITitle] Failed to generate AI title, keeping fallback:', error);
+  }
 }
 
 export function useChatHistory() {
@@ -669,9 +718,11 @@ export function useChatHistory() {
 
       if (!description.get()) {
         /*
-         * Generate a meaningful chat title from the user's first message.
-         * Strip [Model: ...] and [Provider: ...] metadata that gets
-         * prepended to user messages before extracting the title.
+         * Generate a meaningful chat title using AI. We extract the clean
+         * user text and model/provider metadata from the first user message,
+         * then fire a background request to /api/chat-title. The AI-generated
+         * title is set asynchronously — a truncated fallback is shown immediately
+         * while the API call is in flight.
          */
         const firstUserMessage = messages.find((m) => m.role === 'user');
         let userText = firstUserMessage
@@ -680,11 +731,21 @@ export function useChatHistory() {
               : firstUserMessage.content) || ''
           : '';
 
+        // Extract model/provider before stripping them
+        const modelMatch = userText.match(MODEL_REGEX);
+        const providerMatch = userText.match(PROVIDER_REGEX);
+        const extractedModel = modelMatch?.[1] || undefined;
+        const extractedProvider = providerMatch?.[1] || undefined;
+
         userText = userText.replace(MODEL_REGEX, '').replace(PROVIDER_REGEX, '').trim();
 
         if (userText) {
-          const title = userText.length > 60 ? userText.slice(0, 57) + '...' : userText;
-          description.set(title);
+          // Set an immediate truncated title as fallback
+          const fallbackTitle = userText.length > 60 ? userText.slice(0, 57) + '...' : userText;
+          description.set(fallbackTitle);
+
+          // Fire AI title generation in the background (non-blocking)
+          generateAITitle(userText, extractedModel, extractedProvider);
         } else if (firstArtifact?.title) {
           description.set(firstArtifact.title);
         }
