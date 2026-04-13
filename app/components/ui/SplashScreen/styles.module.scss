@@ -118,7 +118,8 @@
   background: linear-gradient(90deg, var(--primary-color), var(--accent-color), var(--secondary-color));
   background-size: 200% 100%;
   width: 0%;
-  animation: loadProgress 1.6s 1s cubic-bezier(0.4, 0, 0.2, 1) forwards,
+  animation:
+    loadProgress 1.6s 1s cubic-bezier(0.4, 0, 0.2, 1) forwards,
     shimmer 1.2s 1s ease-in-out infinite;
 }
 

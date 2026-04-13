@@ -59,26 +59,189 @@ export function isExpoProject(files: FileMap): boolean {
 }
 
 /**
- * Exports the current project files to Expo Snack.
- * Lazy-loads snack-sdk on first call to keep the main bundle lean.
- *
- * @returns The full Snack URL (e.g. https://snack.expo.dev/abc123)
+ * State listener callback type for SnackSession.
  */
-export async function exportToExpoSnack(files: FileMap): Promise<string> {
-  // Lazy-load snack-sdk — named export, not default
-  const snackSdk = await import('snack-sdk');
+export type SnackSessionStateListener = (state: {
+  connectedClients: Record<string, { id: string; name: string; platform: string; status: string }>;
+  online: boolean;
+  url: string;
+}) => void;
 
-  const pkgJsonContent = findPackageJson(files);
+/**
+ * A live Snack session that connects to Expo Go via QR code.
+ *
+ * Uses snack-sdk with `online: true` to establish a pubsub channel.
+ * The `exp://` URL is available immediately — no `saveAsync()` needed.
+ * Connected Expo Go clients receive live code updates automatically.
+ */
+export class SnackSession {
+  private _snack: any;
+  private _disposed = false;
 
-  if (!pkgJsonContent) {
-    throw new Error('No package.json found in the project');
+  private constructor(snack: any) {
+    this._snack = snack;
   }
 
-  const parsed = JSON.parse(pkgJsonContent);
-  const projectName = parsed.name || 'HackCortex Project';
-  const projectDescription = parsed.description || 'Exported from Hack Cortex';
+  /**
+   * Create a new live Snack session from the project's FileMap.
+   * Lazy-loads snack-sdk to keep the main bundle lean.
+   */
+  static async create(files: FileMap): Promise<SnackSession> {
+    const snackSdk = await import('snack-sdk');
 
-  // Build Snack file map
+    const pkgJsonContent = findPackageJson(files);
+
+    if (!pkgJsonContent) {
+      throw new Error('No package.json found in the project');
+    }
+
+    const parsed = JSON.parse(pkgJsonContent);
+    const projectName = parsed.name || 'HackCortex Project';
+    const projectDescription = parsed.description || 'Exported from Hack Cortex';
+
+    // Build Snack file map
+    const snackFiles = buildSnackFiles(files, parsed);
+
+    // Extract non-ecosystem dependencies
+    const allDeps = { ...parsed.dependencies, ...parsed.devDependencies };
+    const snackDependencies = buildSnackDependencies(allDeps);
+
+    // Pick the best SDK version
+    const supportedVersions = snackSdk.getSupportedSDKVersions();
+    const sdkVersion = pickBestSDKVersion(supportedVersions, allDeps.expo as string | undefined);
+
+    logger.info('Creating live Snack session', {
+      fileCount: Object.keys(snackFiles).length,
+      depCount: Object.keys(snackDependencies).length,
+      sdkVersion,
+    });
+
+    // Create the Snack instance with online: true for live session
+    const snack = new snackSdk.Snack({
+      name: projectName,
+      description: projectDescription,
+      files: snackFiles,
+      dependencies: snackDependencies,
+      sdkVersion: sdkVersion as any,
+      online: true,
+    });
+
+    return new SnackSession(snack);
+  }
+
+  /**
+   * The `exp://` URL for Expo Go to connect to this session.
+   * Available immediately after creation — no save needed.
+   */
+  get expUrl(): string {
+    return this._snack.getState().url;
+  }
+
+  /**
+   * Map of currently connected Expo Go clients.
+   */
+  get connectedClients(): Record<string, { id: string; name: string; platform: string; status: string }> {
+    return this._snack.getState().connectedClients;
+  }
+
+  /**
+   * Whether the session is online (pubsub channel active).
+   */
+  get isOnline(): boolean {
+    return this._snack.getState().online;
+  }
+
+  /**
+   * Whether this session has been disposed.
+   */
+  get isDisposed(): boolean {
+    return this._disposed;
+  }
+
+  /**
+   * Subscribe to state changes (connected clients, online status, etc.).
+   * Returns an unsubscribe function.
+   */
+  addStateListener(listener: SnackSessionStateListener): () => void {
+    return this._snack.addStateListener((state: any) => {
+      listener({
+        connectedClients: state.connectedClients,
+        online: state.online,
+        url: state.url,
+      });
+    });
+  }
+
+  /**
+   * Subscribe to log events from connected devices.
+   * Returns an unsubscribe function.
+   */
+  addLogListener(listener: (event: { type: string; message: string }) => void): () => void {
+    return this._snack.addLogListener(listener);
+  }
+
+  /**
+   * Update the Snack session with new project files.
+   * Call this when the user edits files in the editor.
+   * snack-sdk handles debouncing via codeChangesDelay internally.
+   */
+  updateFiles(files: FileMap): void {
+    if (this._disposed) {
+      return;
+    }
+
+    const pkgJsonContent = findPackageJson(files);
+
+    if (!pkgJsonContent) {
+      return;
+    }
+
+    const parsed = JSON.parse(pkgJsonContent);
+    const snackFiles = buildSnackFiles(files, parsed);
+    const allDeps = { ...parsed.dependencies, ...parsed.devDependencies };
+    const snackDependencies = buildSnackDependencies(allDeps);
+
+    this._snack.updateFiles(snackFiles);
+    this._snack.updateDependencies(snackDependencies);
+  }
+
+  /**
+   * Force-reload all connected Expo Go clients.
+   */
+  reloadClients(): void {
+    if (!this._disposed) {
+      this._snack.reloadConnectedClients();
+    }
+  }
+
+  /**
+   * Tear down the live session. Disconnects from pubsub.
+   * The session cannot be reused after this.
+   */
+  dispose(): void {
+    if (this._disposed) {
+      return;
+    }
+
+    this._disposed = true;
+
+    try {
+      this._snack.setOnline(false);
+    } catch (error) {
+      logger.warn('Error disposing Snack session', error);
+    }
+
+    logger.info('Snack session disposed');
+  }
+}
+
+// ─── Shared helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Build the Snack file map from a FileMap, including App.js injection
+ * for expo-router projects.
+ */
+function buildSnackFiles(files: FileMap, parsedPkgJson: any): Record<string, { type: 'CODE'; contents: string }> {
   const snackFiles: Record<string, { type: 'CODE'; contents: string }> = {};
 
   for (const [filePath, dirent] of Object.entries(files)) {
@@ -98,11 +261,8 @@ export async function exportToExpoSnack(files: FileMap): Promise<string> {
     };
   }
 
-  /*
-   * Inject App.js for expo-router projects that don't have one.
-   * Snack requires App.js as the entry point.
-   */
-  const allDeps = { ...parsed.dependencies, ...parsed.devDependencies };
+  // Inject App.js for expo-router projects that don't have one
+  const allDeps = { ...parsedPkgJson.dependencies, ...parsedPkgJson.devDependencies };
   const usesExpoRouter = 'expo-router' in allDeps;
 
   if (usesExpoRouter && !snackFiles['App.js'] && !snackFiles['App.tsx']) {
@@ -112,13 +272,13 @@ export async function exportToExpoSnack(files: FileMap): Promise<string> {
     };
   }
 
-  /*
-   * Extract ONLY non-Expo-ecosystem dependencies.
-   * Snack provides Expo ecosystem packages (expo-*, react-native-*, etc.)
-   * automatically for the selected SDK version. Sending them with
-   * template-specific versions causes snackager resolution failures
-   * when the project SDK (e.g. 55) is newer than what snack-sdk supports (e.g. 54).
-   */
+  return snackFiles;
+}
+
+/**
+ * Extract only non-Expo-ecosystem dependencies.
+ */
+function buildSnackDependencies(allDeps: Record<string, string>): Record<string, { version: string }> {
   const snackDependencies: Record<string, { version: string }> = {};
 
   for (const [name, version] of Object.entries(allDeps)) {
@@ -127,37 +287,7 @@ export async function exportToExpoSnack(files: FileMap): Promise<string> {
     }
   }
 
-  // Determine the best SDK version supported by snack-sdk
-  const supportedVersions = snackSdk.getSupportedSDKVersions();
-  const sdkVersion = pickBestSDKVersion(supportedVersions, allDeps.expo as string | undefined);
-
-  logger.info('Exporting to Expo Snack', {
-    fileCount: Object.keys(snackFiles).length,
-    depCount: Object.keys(snackDependencies).length,
-    sdkVersion,
-  });
-
-  // Create the Snack instance
-  const snack = new snackSdk.Snack({
-    name: projectName,
-    description: projectDescription,
-    files: snackFiles,
-    dependencies: snackDependencies,
-
-    /*
-     * Cast needed because pickBestSDKVersion returns one of the supported values,
-     * but TypeScript can't infer it narrows to the SDKVersion union type.
-     */
-    sdkVersion: sdkVersion as Parameters<typeof snackSdk.Snack.prototype.setSDKVersion>[0],
-  });
-
-  // Save to Expo servers (anonymous, no account needed)
-  const { id } = await snack.saveAsync();
-
-  const url = `https://snack.expo.dev/${id}`;
-  logger.info('Snack saved successfully', { id, url });
-
-  return url;
+  return snackDependencies;
 }
 
 /**

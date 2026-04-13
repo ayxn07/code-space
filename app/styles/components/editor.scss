@@ -139,7 +139,8 @@ html[data-theme='dark'] {
  * Uses the theme accent color so it adapts to whichever theme the user selects.
  */
 @keyframes streaming-glow-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.45;
   }
   50% {
@@ -153,7 +154,8 @@ html[data-theme='dark'] {
     color-mix(in srgb, var(--theme-accent-500) 12%, transparent) 0%,
     color-mix(in srgb, var(--theme-accent-400) 6%, transparent) 100%
   );
-  box-shadow: inset 3px 0 0 var(--theme-accent-500),
+  box-shadow:
+    inset 3px 0 0 var(--theme-accent-500),
     0 0 15px color-mix(in srgb, var(--theme-accent-500) 10%, transparent),
     0 0 30px color-mix(in srgb, var(--theme-accent-500) 5%, transparent);
   animation: streaming-glow-pulse 2s ease-in-out infinite;

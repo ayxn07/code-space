@@ -7,7 +7,9 @@ import { ScreenshotSelector } from './ScreenshotSelector';
 import type { ElementInfo } from './Inspector';
 import { webcontainer } from '~/lib/webcontainer';
 import { WORK_DIR } from '~/utils/constants';
-import { isExpoProject, exportToExpoSnack } from '~/utils/snackExport';
+import { isExpoProject, SnackSession } from '~/utils/snackExport';
+import { expoUrlAtom, snackSessionAtom, snackModalOpenAtom } from '~/lib/stores/qrCodeStore';
+import { ExpoQrModal } from './ExpoQrModal';
 import { toast } from 'react-toastify';
 
 type ResizeSide = 'left' | 'right' | null;
@@ -140,6 +142,17 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const [isExportingToSnack, setIsExportingToSnack] = useState(false);
 
   const isExpo = useMemo(() => isExpoProject(filesStore), [filesStore]);
+
+  // Auto-sync file changes to the live Snack session
+  useEffect(() => {
+    const session = snackSessionAtom.get();
+
+    if (!session || session.isDisposed) {
+      return;
+    }
+
+    session.updateFiles(filesStore);
+  }, [filesStore]);
 
   useEffect(() => {
     if (!activePreview) {
@@ -712,6 +725,14 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   };
 
   const handleExportToSnack = useCallback(async () => {
+    // If a session already exists, just open the modal
+    const existingSession = snackSessionAtom.get();
+
+    if (existingSession && !existingSession.isDisposed) {
+      snackModalOpenAtom.set(true);
+      return;
+    }
+
     if (isExportingToSnack) {
       return;
     }
@@ -719,441 +740,450 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
     setIsExportingToSnack(true);
 
     try {
-      const url = await exportToExpoSnack(filesStore);
-      window.open(url, '_blank');
-      toast.success('Opened in Expo Snack');
+      const session = await SnackSession.create(filesStore);
+      const expUrl = session.expUrl;
+
+      snackSessionAtom.set(session);
+      expoUrlAtom.set(expUrl);
+      snackModalOpenAtom.set(true);
+
+      toast.success('Live Snack session created');
     } catch (error: any) {
-      console.error('[Preview] Failed to export to Expo Snack:', error);
-      toast.error(error?.message || 'Failed to export to Expo Snack');
+      console.error('[Preview] Failed to create Snack session:', error);
+      toast.error(error?.message || 'Failed to create Snack session');
     } finally {
       setIsExportingToSnack(false);
     }
   }, [filesStore, isExportingToSnack]);
 
   return (
-    <div ref={containerRef} className={`w-full h-full flex flex-col relative`}>
-      {isPortDropdownOpen && (
-        <div className="z-iframe-overlay w-full h-full absolute" onClick={() => setIsPortDropdownOpen(false)} />
-      )}
-      <div className="bg-bolt-elements-background-depth-2 p-2 flex items-center gap-2">
-        <div className="flex items-center gap-2">
-          <IconButton icon="i-ph:arrow-clockwise" onClick={reloadPreview} />
-          <IconButton
-            icon="i-ph:selection"
-            onClick={() => setIsSelectionMode(!isSelectionMode)}
-            className={isSelectionMode ? 'bg-bolt-elements-background-depth-3' : ''}
-          />
-        </div>
-
-        <div className="flex-grow flex items-center gap-1 bg-bolt-elements-preview-addressBar-background border border-bolt-elements-borderColor text-bolt-elements-preview-addressBar-text rounded-full px-1 py-1 text-sm hover:bg-bolt-elements-preview-addressBar-backgroundHover hover:focus-within:bg-bolt-elements-preview-addressBar-backgroundActive focus-within:bg-bolt-elements-preview-addressBar-backgroundActive focus-within-border-bolt-elements-borderColorActive focus-within:text-bolt-elements-preview-addressBar-textActive">
-          <PortDropdown
-            activePreviewIndex={activePreviewIndex}
-            setActivePreviewIndex={setActivePreviewIndex}
-            isDropdownOpen={isPortDropdownOpen}
-            setHasSelectedPreview={(value) => (hasSelectedPreview.current = value)}
-            setIsDropdownOpen={setIsPortDropdownOpen}
-            previews={previews}
-          />
-          <input
-            title="URL Path"
-            ref={inputRef}
-            className="w-full bg-transparent outline-none"
-            type="text"
-            value={displayPath}
-            onChange={(event) => {
-              setDisplayPath(event.target.value);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && activePreview) {
-                let targetPath = displayPath.trim();
-
-                if (!targetPath.startsWith('/')) {
-                  targetPath = '/' + targetPath;
-                }
-
-                const fullUrl = activePreview.baseUrl + targetPath;
-                setIframeUrl(fullUrl);
-                setDisplayPath(targetPath);
-
-                if (inputRef.current) {
-                  inputRef.current.blur();
-                }
-              }
-            }}
-            disabled={!activePreview}
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <IconButton
-            icon="i-ph:devices"
-            onClick={toggleDeviceMode}
-            title={isDeviceModeOn ? 'Switch to Responsive Mode' : 'Switch to Device Mode'}
-          />
-
-          {isExpo && (
+    <>
+      <div ref={containerRef} className={`w-full h-full flex flex-col relative`}>
+        {isPortDropdownOpen && (
+          <div className="z-iframe-overlay w-full h-full absolute" onClick={() => setIsPortDropdownOpen(false)} />
+        )}
+        <div className="bg-bolt-elements-background-depth-2 p-2 flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            <IconButton icon="i-ph:arrow-clockwise" onClick={reloadPreview} />
             <IconButton
-              icon={isExportingToSnack ? 'i-svg-spinners:90-ring-with-bg' : 'i-ph:rocket-launch'}
-              onClick={handleExportToSnack}
-              title="Open in Expo Snack"
-              disabled={isExportingToSnack}
+              icon="i-ph:selection"
+              onClick={() => setIsSelectionMode(!isSelectionMode)}
+              className={isSelectionMode ? 'bg-bolt-elements-background-depth-3' : ''}
             />
-          )}
+          </div>
 
-          {isDeviceModeOn && (
-            <>
-              <IconButton
-                icon="i-ph:device-rotate"
-                onClick={() => setIsLandscape(!isLandscape)}
-                title={isLandscape ? 'Switch to Portrait' : 'Switch to Landscape'}
-              />
-              <IconButton
-                icon={showDeviceFrameInPreview ? 'i-ph:device-mobile' : 'i-ph:device-mobile-slash'}
-                onClick={() => setShowDeviceFrameInPreview(!showDeviceFrameInPreview)}
-                title={showDeviceFrameInPreview ? 'Hide Device Frame' : 'Show Device Frame'}
-              />
-            </>
-          )}
-          <IconButton
-            icon="i-ph:cursor-click"
-            onClick={toggleInspectorMode}
-            className={
-              isInspectorMode ? 'bg-bolt-elements-background-depth-3 !text-bolt-elements-item-contentAccent' : ''
-            }
-            title={isInspectorMode ? 'Disable Element Inspector' : 'Enable Element Inspector'}
-          />
-          <IconButton
-            icon={isFullscreen ? 'i-ph:arrows-in' : 'i-ph:arrows-out'}
-            onClick={toggleFullscreen}
-            title={isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
-          />
+          <div className="flex-grow flex items-center gap-1 bg-bolt-elements-preview-addressBar-background border border-bolt-elements-borderColor text-bolt-elements-preview-addressBar-text rounded-full px-1 py-1 text-sm hover:bg-bolt-elements-preview-addressBar-backgroundHover hover:focus-within:bg-bolt-elements-preview-addressBar-backgroundActive focus-within:bg-bolt-elements-preview-addressBar-backgroundActive focus-within-border-bolt-elements-borderColorActive focus-within:text-bolt-elements-preview-addressBar-textActive">
+            <PortDropdown
+              activePreviewIndex={activePreviewIndex}
+              setActivePreviewIndex={setActivePreviewIndex}
+              isDropdownOpen={isPortDropdownOpen}
+              setHasSelectedPreview={(value) => (hasSelectedPreview.current = value)}
+              setIsDropdownOpen={setIsPortDropdownOpen}
+              previews={previews}
+            />
+            <input
+              title="URL Path"
+              ref={inputRef}
+              className="w-full bg-transparent outline-none"
+              type="text"
+              value={displayPath}
+              onChange={(event) => {
+                setDisplayPath(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && activePreview) {
+                  let targetPath = displayPath.trim();
 
-          <div className="flex items-center relative">
+                  if (!targetPath.startsWith('/')) {
+                    targetPath = '/' + targetPath;
+                  }
+
+                  const fullUrl = activePreview.baseUrl + targetPath;
+                  setIframeUrl(fullUrl);
+                  setDisplayPath(targetPath);
+
+                  if (inputRef.current) {
+                    inputRef.current.blur();
+                  }
+                }
+              }}
+              disabled={!activePreview}
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
             <IconButton
-              icon="i-ph:list"
-              onClick={() => setIsWindowSizeDropdownOpen(!isWindowSizeDropdownOpen)}
-              title="New Window Options"
+              icon="i-ph:devices"
+              onClick={toggleDeviceMode}
+              title={isDeviceModeOn ? 'Switch to Responsive Mode' : 'Switch to Device Mode'}
             />
 
-            {isWindowSizeDropdownOpen && (
+            {isExpo && (
+              <IconButton
+                icon={isExportingToSnack ? 'i-svg-spinners:90-ring-with-bg' : 'i-ph:rocket-launch'}
+                onClick={handleExportToSnack}
+                title="Preview on device"
+                disabled={isExportingToSnack}
+              />
+            )}
+
+            {isDeviceModeOn && (
               <>
-                <div className="fixed inset-0 z-50" onClick={() => setIsWindowSizeDropdownOpen(false)} />
-                <div className="absolute right-0 top-full mt-2 z-50 min-w-[240px] max-h-[400px] overflow-y-auto bg-white dark:bg-black rounded-xl shadow-2xl border border-[#E5E7EB] dark:border-[rgba(255,255,255,0.1)] overflow-hidden">
-                  <div className="p-3 border-b border-[#E5E7EB] dark:border-[rgba(255,255,255,0.1)]">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-[#111827] dark:text-gray-300">Window Options</span>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <button
-                        className={`flex w-full justify-between items-center text-start bg-transparent text-xs text-bolt-elements-textTertiary hover:text-bolt-elements-textPrimary`}
-                        onClick={() => {
-                          openInNewTab();
-                        }}
-                      >
-                        <span>Open in new tab</span>
-                        <div className="i-ph:arrow-square-out h-5 w-4" />
-                      </button>
-                      <button
-                        className={`flex w-full justify-between items-center text-start bg-transparent text-xs text-bolt-elements-textTertiary hover:text-bolt-elements-textPrimary`}
-                        onClick={() => {
-                          if (!activePreview?.baseUrl) {
-                            console.warn('[Preview] No active preview available');
-                            return;
-                          }
+                <IconButton
+                  icon="i-ph:device-rotate"
+                  onClick={() => setIsLandscape(!isLandscape)}
+                  title={isLandscape ? 'Switch to Portrait' : 'Switch to Landscape'}
+                />
+                <IconButton
+                  icon={showDeviceFrameInPreview ? 'i-ph:device-mobile' : 'i-ph:device-mobile-slash'}
+                  onClick={() => setShowDeviceFrameInPreview(!showDeviceFrameInPreview)}
+                  title={showDeviceFrameInPreview ? 'Hide Device Frame' : 'Show Device Frame'}
+                />
+              </>
+            )}
+            <IconButton
+              icon="i-ph:cursor-click"
+              onClick={toggleInspectorMode}
+              className={
+                isInspectorMode ? 'bg-bolt-elements-background-depth-3 !text-bolt-elements-item-contentAccent' : ''
+              }
+              title={isInspectorMode ? 'Disable Element Inspector' : 'Enable Element Inspector'}
+            />
+            <IconButton
+              icon={isFullscreen ? 'i-ph:arrows-in' : 'i-ph:arrows-out'}
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
+            />
 
-                          const match = activePreview.baseUrl.match(
-                            /^https?:\/\/([^.]+)\.local-credentialless\.webcontainer-api\.io/,
-                          );
+            <div className="flex items-center relative">
+              <IconButton
+                icon="i-ph:list"
+                onClick={() => setIsWindowSizeDropdownOpen(!isWindowSizeDropdownOpen)}
+                title="New Window Options"
+              />
 
-                          if (!match) {
-                            console.warn('[Preview] Invalid WebContainer URL:', activePreview.baseUrl);
-                            return;
-                          }
-
-                          const previewId = match[1];
-                          const previewUrl = `/webcontainer/preview/${previewId}`;
-
-                          // Open in a new window with simple parameters
-                          window.open(
-                            previewUrl,
-                            `preview-${previewId}`,
-                            'width=1280,height=720,menubar=no,toolbar=no,location=no,status=no,resizable=yes',
-                          );
-                        }}
-                      >
-                        <span>Open in new window</span>
-                        <div className="i-ph:browser h-5 w-4" />
-                      </button>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-bolt-elements-textTertiary">Show Device Frame</span>
+              {isWindowSizeDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-50" onClick={() => setIsWindowSizeDropdownOpen(false)} />
+                  <div className="absolute right-0 top-full mt-2 z-50 min-w-[240px] max-h-[400px] overflow-y-auto bg-white dark:bg-black rounded-xl shadow-2xl border border-[#E5E7EB] dark:border-[rgba(255,255,255,0.1)] overflow-hidden">
+                    <div className="p-3 border-b border-[#E5E7EB] dark:border-[rgba(255,255,255,0.1)]">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-[#111827] dark:text-gray-300">Window Options</span>
+                      </div>
+                      <div className="flex flex-col gap-2">
                         <button
-                          className={`w-10 h-5 rounded-full transition-colors duration-200 ${
-                            showDeviceFrame ? 'bg-[#6D28D9]' : 'bg-gray-300 dark:bg-gray-700'
-                          } relative`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowDeviceFrame(!showDeviceFrame);
+                          className={`flex w-full justify-between items-center text-start bg-transparent text-xs text-bolt-elements-textTertiary hover:text-bolt-elements-textPrimary`}
+                          onClick={() => {
+                            openInNewTab();
                           }}
                         >
-                          <span
-                            className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
-                              showDeviceFrame ? 'transform translate-x-5' : ''
-                            }`}
-                          />
+                          <span>Open in new tab</span>
+                          <div className="i-ph:arrow-square-out h-5 w-4" />
                         </button>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-bolt-elements-textTertiary">Landscape Mode</span>
                         <button
-                          className={`w-10 h-5 rounded-full transition-colors duration-200 ${
-                            isLandscape ? 'bg-[#6D28D9]' : 'bg-gray-300 dark:bg-gray-700'
-                          } relative`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIsLandscape(!isLandscape);
+                          className={`flex w-full justify-between items-center text-start bg-transparent text-xs text-bolt-elements-textTertiary hover:text-bolt-elements-textPrimary`}
+                          onClick={() => {
+                            if (!activePreview?.baseUrl) {
+                              console.warn('[Preview] No active preview available');
+                              return;
+                            }
+
+                            const match = activePreview.baseUrl.match(
+                              /^https?:\/\/([^.]+)\.local-credentialless\.webcontainer-api\.io/,
+                            );
+
+                            if (!match) {
+                              console.warn('[Preview] Invalid WebContainer URL:', activePreview.baseUrl);
+                              return;
+                            }
+
+                            const previewId = match[1];
+                            const previewUrl = `/webcontainer/preview/${previewId}`;
+
+                            // Open in a new window with simple parameters
+                            window.open(
+                              previewUrl,
+                              `preview-${previewId}`,
+                              'width=1280,height=720,menubar=no,toolbar=no,location=no,status=no,resizable=yes',
+                            );
                           }}
                         >
-                          <span
-                            className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
-                              isLandscape ? 'transform translate-x-5' : ''
-                            }`}
-                          />
+                          <span>Open in new window</span>
+                          <div className="i-ph:browser h-5 w-4" />
                         </button>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-bolt-elements-textTertiary">Show Device Frame</span>
+                          <button
+                            className={`w-10 h-5 rounded-full transition-colors duration-200 ${
+                              showDeviceFrame ? 'bg-[#6D28D9]' : 'bg-gray-300 dark:bg-gray-700'
+                            } relative`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowDeviceFrame(!showDeviceFrame);
+                            }}
+                          >
+                            <span
+                              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
+                                showDeviceFrame ? 'transform translate-x-5' : ''
+                              }`}
+                            />
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-bolt-elements-textTertiary">Landscape Mode</span>
+                          <button
+                            className={`w-10 h-5 rounded-full transition-colors duration-200 ${
+                              isLandscape ? 'bg-[#6D28D9]' : 'bg-gray-300 dark:bg-gray-700'
+                            } relative`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsLandscape(!isLandscape);
+                            }}
+                          >
+                            <span
+                              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
+                                isLandscape ? 'transform translate-x-5' : ''
+                              }`}
+                            />
+                          </button>
+                        </div>
                       </div>
                     </div>
+                    {WINDOW_SIZES.map((size) => (
+                      <button
+                        key={size.name}
+                        className="w-full px-4 py-3.5 text-left text-[#111827] dark:text-gray-300 text-sm whitespace-nowrap flex items-center gap-3 group hover:bg-[#F5EEFF] dark:hover:bg-gray-900 bg-white dark:bg-black"
+                        onClick={() => {
+                          setSelectedWindowSize(size);
+                          setIsWindowSizeDropdownOpen(false);
+                          openInNewWindow(size);
+                        }}
+                      >
+                        <div
+                          className={`${size.icon} w-5 h-5 text-[#6B7280] dark:text-gray-400 group-hover:text-[#6D28D9] dark:group-hover:text-[#6D28D9] transition-colors duration-200`}
+                        />
+                        <div className="flex-grow flex flex-col">
+                          <span className="font-medium group-hover:text-[#6D28D9] dark:group-hover:text-[#6D28D9] transition-colors duration-200">
+                            {size.name}
+                          </span>
+                          <span className="text-xs text-[#6B7280] dark:text-gray-400 group-hover:text-[#6D28D9] dark:group-hover:text-[#6D28D9] transition-colors duration-200">
+                            {isLandscape && (size.frameType === 'mobile' || size.frameType === 'tablet')
+                              ? `${size.height} × ${size.width}`
+                              : `${size.width} × ${size.height}`}
+                            {size.hasFrame && showDeviceFrame ? ' (with frame)' : ''}
+                          </span>
+                        </div>
+                        {selectedWindowSize.name === size.name && (
+                          <div className="text-[#6D28D9] dark:text-[#6D28D9]">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                          </div>
+                        )}
+                      </button>
+                    ))}
                   </div>
-                  {WINDOW_SIZES.map((size) => (
-                    <button
-                      key={size.name}
-                      className="w-full px-4 py-3.5 text-left text-[#111827] dark:text-gray-300 text-sm whitespace-nowrap flex items-center gap-3 group hover:bg-[#F5EEFF] dark:hover:bg-gray-900 bg-white dark:bg-black"
-                      onClick={() => {
-                        setSelectedWindowSize(size);
-                        setIsWindowSizeDropdownOpen(false);
-                        openInNewWindow(size);
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 border-t border-bolt-elements-borderColor flex justify-center items-center overflow-auto">
+          <div
+            style={{
+              width: isDeviceModeOn ? (showDeviceFrameInPreview ? '100%' : `${widthPercent}%`) : '100%',
+              height: '100%',
+              overflow: 'auto',
+              background: 'var(--bolt-elements-background-depth-1)',
+              position: 'relative',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            {activePreview ? (
+              <>
+                {isDeviceModeOn && showDeviceFrameInPreview ? (
+                  <div
+                    className="device-wrapper"
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      width: '100%',
+                      height: '100%',
+                      padding: '0',
+                      overflow: 'auto',
+                      transition: 'all 0.3s ease',
+                      position: 'relative',
+                    }}
+                  >
+                    <div
+                      className="device-frame-container"
+                      style={{
+                        position: 'relative',
+                        borderRadius: selectedWindowSize.frameType === 'mobile' ? '36px' : '20px',
+                        background: getFrameColor(),
+                        padding: getFramePadding(),
+                        boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+                        overflow: 'hidden',
+                        transform: 'scale(1)',
+                        transformOrigin: 'center center',
+                        transition: 'all 0.3s ease',
+                        margin: '40px',
+                        width: isLandscape
+                          ? `${selectedWindowSize.height + (selectedWindowSize.frameType === 'mobile' ? 120 : 60)}px`
+                          : `${selectedWindowSize.width + (selectedWindowSize.frameType === 'mobile' ? 40 : 60)}px`,
+                        height: isLandscape
+                          ? `${selectedWindowSize.width + (selectedWindowSize.frameType === 'mobile' ? 80 : 60)}px`
+                          : `${selectedWindowSize.height + (selectedWindowSize.frameType === 'mobile' ? 80 : 100)}px`,
                       }}
                     >
+                      {/* Notch - positioned based on orientation */}
                       <div
-                        className={`${size.icon} w-5 h-5 text-[#6B7280] dark:text-gray-400 group-hover:text-[#6D28D9] dark:group-hover:text-[#6D28D9] transition-colors duration-200`}
+                        style={{
+                          position: 'absolute',
+                          top: isLandscape ? '50%' : '20px',
+                          left: isLandscape ? '30px' : '50%',
+                          transform: isLandscape ? 'translateY(-50%)' : 'translateX(-50%)',
+                          width: isLandscape ? '8px' : selectedWindowSize.frameType === 'mobile' ? '60px' : '80px',
+                          height: isLandscape ? (selectedWindowSize.frameType === 'mobile' ? '60px' : '80px') : '8px',
+                          background: '#333',
+                          borderRadius: '4px',
+                          zIndex: 2,
+                        }}
                       />
-                      <div className="flex-grow flex flex-col">
-                        <span className="font-medium group-hover:text-[#6D28D9] dark:group-hover:text-[#6D28D9] transition-colors duration-200">
-                          {size.name}
-                        </span>
-                        <span className="text-xs text-[#6B7280] dark:text-gray-400 group-hover:text-[#6D28D9] dark:group-hover:text-[#6D28D9] transition-colors duration-200">
-                          {isLandscape && (size.frameType === 'mobile' || size.frameType === 'tablet')
-                            ? `${size.height} × ${size.width}`
-                            : `${size.width} × ${size.height}`}
-                          {size.hasFrame && showDeviceFrame ? ' (with frame)' : ''}
-                        </span>
-                      </div>
-                      {selectedWindowSize.name === size.name && (
-                        <div className="text-[#6D28D9] dark:text-[#6D28D9]">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                          </svg>
-                        </div>
-                      )}
-                    </button>
-                  ))}
+
+                      {/* Home button - positioned based on orientation */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          bottom: isLandscape ? '50%' : '15px',
+                          right: isLandscape ? '30px' : '50%',
+                          transform: isLandscape ? 'translateY(50%)' : 'translateX(50%)',
+                          width: isLandscape ? '4px' : '40px',
+                          height: isLandscape ? '40px' : '4px',
+                          background: '#333',
+                          borderRadius: '50%',
+                          zIndex: 2,
+                        }}
+                      />
+
+                      <iframe
+                        ref={iframeRef}
+                        title="preview"
+                        style={{
+                          border: 'none',
+                          width: isLandscape ? `${selectedWindowSize.height}px` : `${selectedWindowSize.width}px`,
+                          height: isLandscape ? `${selectedWindowSize.width}px` : `${selectedWindowSize.height}px`,
+                          background: 'white',
+                          display: 'block',
+                        }}
+                        src={iframeUrl}
+                        sandbox="allow-scripts allow-forms allow-popups allow-modals allow-storage-access-by-user-activation allow-same-origin"
+                        allow="cross-origin-isolated"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <iframe
+                    ref={iframeRef}
+                    title="preview"
+                    className="border-none w-full h-full bg-bolt-elements-background-depth-1"
+                    src={iframeUrl}
+                    sandbox="allow-scripts allow-forms allow-popups allow-modals allow-storage-access-by-user-activation allow-same-origin"
+                    allow="geolocation; ch-ua-full-version-list; cross-origin-isolated; screen-wake-lock; publickey-credentials-get; shared-storage-select-url; ch-ua-arch; bluetooth; compute-pressure; ch-prefers-reduced-transparency; deferred-fetch; usb; ch-save-data; publickey-credentials-create; shared-storage; deferred-fetch-minimal; run-ad-auction; ch-ua-form-factors; ch-downlink; otp-credentials; payment; ch-ua; ch-ua-model; ch-ect; autoplay; camera; private-state-token-issuance; accelerometer; ch-ua-platform-version; idle-detection; private-aggregation; interest-cohort; ch-viewport-height; local-fonts; ch-ua-platform; midi; ch-ua-full-version; xr-spatial-tracking; clipboard-read; gamepad; display-capture; keyboard-map; join-ad-interest-group; ch-width; ch-prefers-reduced-motion; browsing-topics; encrypted-media; gyroscope; serial; ch-rtt; ch-ua-mobile; window-management; unload; ch-dpr; ch-prefers-color-scheme; ch-ua-wow64; attribution-reporting; fullscreen; identity-credentials-get; private-state-token-redemption; hid; ch-ua-bitness; storage-access; sync-xhr; ch-device-memory; ch-viewport-width; picture-in-picture; magnetometer; clipboard-write; microphone"
+                  />
+                )}
+                <ScreenshotSelector
+                  isSelectionMode={isSelectionMode}
+                  setIsSelectionMode={setIsSelectionMode}
+                  containerRef={iframeRef}
+                />
+              </>
+            ) : (
+              <div className="flex w-full h-full justify-center items-center bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary">
+                {isPlainHtmlProject ? (
+                  <div className="flex flex-col items-center gap-4">
+                    {isStartingServer ? (
+                      <>
+                        <div className="i-svg-spinners:90-ring-with-bg text-4xl text-bolt-elements-textSecondary" />
+                        <p className="text-sm text-bolt-elements-textSecondary">Starting preview server...</p>
+                      </>
+                    ) : serverStartError ? (
+                      <>
+                        <div className="i-ph:warning-circle text-4xl text-red-400" />
+                        <p className="text-sm text-red-400">{serverStartError}</p>
+                        <button
+                          onClick={handleStartStaticServer}
+                          className="px-4 py-2 rounded-md bg-bolt-elements-button-primary-background text-bolt-elements-button-primary-text hover:bg-bolt-elements-button-primary-backgroundHover transition-colors text-sm"
+                        >
+                          Retry
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={handleStartStaticServer}
+                          className="flex items-center gap-2 px-6 py-3 rounded-lg bg-bolt-elements-button-primary-background text-bolt-elements-button-primary-text hover:bg-bolt-elements-button-primary-backgroundHover transition-colors text-base font-medium"
+                        >
+                          <span className="i-ph:play-fill text-lg" />
+                          Start Preview Server
+                        </button>
+                        <p className="text-xs text-bolt-elements-textSecondary">
+                          Plain HTML project detected — click to start a static file server
+                        </p>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  'No preview available'
+                )}
+              </div>
+            )}
+
+            {isDeviceModeOn && !showDeviceFrameInPreview && (
+              <>
+                {/* Width indicator */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '-25px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: 'var(--bolt-elements-background-depth-3, rgba(0,0,0,0.7))',
+                    color: 'var(--bolt-elements-textPrimary, white)',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    pointerEvents: 'none',
+                    opacity: resizingState.current.isResizing ? 1 : 0,
+                    transition: 'opacity 0.3s',
+                  }}
+                >
+                  {currentWidth}px
                 </div>
+
+                <ResizeHandle side="left" />
+                <ResizeHandle side="right" />
               </>
             )}
           </div>
         </div>
       </div>
 
-      <div className="flex-1 border-t border-bolt-elements-borderColor flex justify-center items-center overflow-auto">
-        <div
-          style={{
-            width: isDeviceModeOn ? (showDeviceFrameInPreview ? '100%' : `${widthPercent}%`) : '100%',
-            height: '100%',
-            overflow: 'auto',
-            background: 'var(--bolt-elements-background-depth-1)',
-            position: 'relative',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}
-        >
-          {activePreview ? (
-            <>
-              {isDeviceModeOn && showDeviceFrameInPreview ? (
-                <div
-                  className="device-wrapper"
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    width: '100%',
-                    height: '100%',
-                    padding: '0',
-                    overflow: 'auto',
-                    transition: 'all 0.3s ease',
-                    position: 'relative',
-                  }}
-                >
-                  <div
-                    className="device-frame-container"
-                    style={{
-                      position: 'relative',
-                      borderRadius: selectedWindowSize.frameType === 'mobile' ? '36px' : '20px',
-                      background: getFrameColor(),
-                      padding: getFramePadding(),
-                      boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
-                      overflow: 'hidden',
-                      transform: 'scale(1)',
-                      transformOrigin: 'center center',
-                      transition: 'all 0.3s ease',
-                      margin: '40px',
-                      width: isLandscape
-                        ? `${selectedWindowSize.height + (selectedWindowSize.frameType === 'mobile' ? 120 : 60)}px`
-                        : `${selectedWindowSize.width + (selectedWindowSize.frameType === 'mobile' ? 40 : 60)}px`,
-                      height: isLandscape
-                        ? `${selectedWindowSize.width + (selectedWindowSize.frameType === 'mobile' ? 80 : 60)}px`
-                        : `${selectedWindowSize.height + (selectedWindowSize.frameType === 'mobile' ? 80 : 100)}px`,
-                    }}
-                  >
-                    {/* Notch - positioned based on orientation */}
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: isLandscape ? '50%' : '20px',
-                        left: isLandscape ? '30px' : '50%',
-                        transform: isLandscape ? 'translateY(-50%)' : 'translateX(-50%)',
-                        width: isLandscape ? '8px' : selectedWindowSize.frameType === 'mobile' ? '60px' : '80px',
-                        height: isLandscape ? (selectedWindowSize.frameType === 'mobile' ? '60px' : '80px') : '8px',
-                        background: '#333',
-                        borderRadius: '4px',
-                        zIndex: 2,
-                      }}
-                    />
-
-                    {/* Home button - positioned based on orientation */}
-                    <div
-                      style={{
-                        position: 'absolute',
-                        bottom: isLandscape ? '50%' : '15px',
-                        right: isLandscape ? '30px' : '50%',
-                        transform: isLandscape ? 'translateY(50%)' : 'translateX(50%)',
-                        width: isLandscape ? '4px' : '40px',
-                        height: isLandscape ? '40px' : '4px',
-                        background: '#333',
-                        borderRadius: '50%',
-                        zIndex: 2,
-                      }}
-                    />
-
-                    <iframe
-                      ref={iframeRef}
-                      title="preview"
-                      style={{
-                        border: 'none',
-                        width: isLandscape ? `${selectedWindowSize.height}px` : `${selectedWindowSize.width}px`,
-                        height: isLandscape ? `${selectedWindowSize.width}px` : `${selectedWindowSize.height}px`,
-                        background: 'white',
-                        display: 'block',
-                      }}
-                      src={iframeUrl}
-                      sandbox="allow-scripts allow-forms allow-popups allow-modals allow-storage-access-by-user-activation allow-same-origin"
-                      allow="cross-origin-isolated"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <iframe
-                  ref={iframeRef}
-                  title="preview"
-                  className="border-none w-full h-full bg-bolt-elements-background-depth-1"
-                  src={iframeUrl}
-                  sandbox="allow-scripts allow-forms allow-popups allow-modals allow-storage-access-by-user-activation allow-same-origin"
-                  allow="geolocation; ch-ua-full-version-list; cross-origin-isolated; screen-wake-lock; publickey-credentials-get; shared-storage-select-url; ch-ua-arch; bluetooth; compute-pressure; ch-prefers-reduced-transparency; deferred-fetch; usb; ch-save-data; publickey-credentials-create; shared-storage; deferred-fetch-minimal; run-ad-auction; ch-ua-form-factors; ch-downlink; otp-credentials; payment; ch-ua; ch-ua-model; ch-ect; autoplay; camera; private-state-token-issuance; accelerometer; ch-ua-platform-version; idle-detection; private-aggregation; interest-cohort; ch-viewport-height; local-fonts; ch-ua-platform; midi; ch-ua-full-version; xr-spatial-tracking; clipboard-read; gamepad; display-capture; keyboard-map; join-ad-interest-group; ch-width; ch-prefers-reduced-motion; browsing-topics; encrypted-media; gyroscope; serial; ch-rtt; ch-ua-mobile; window-management; unload; ch-dpr; ch-prefers-color-scheme; ch-ua-wow64; attribution-reporting; fullscreen; identity-credentials-get; private-state-token-redemption; hid; ch-ua-bitness; storage-access; sync-xhr; ch-device-memory; ch-viewport-width; picture-in-picture; magnetometer; clipboard-write; microphone"
-                />
-              )}
-              <ScreenshotSelector
-                isSelectionMode={isSelectionMode}
-                setIsSelectionMode={setIsSelectionMode}
-                containerRef={iframeRef}
-              />
-            </>
-          ) : (
-            <div className="flex w-full h-full justify-center items-center bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary">
-              {isPlainHtmlProject ? (
-                <div className="flex flex-col items-center gap-4">
-                  {isStartingServer ? (
-                    <>
-                      <div className="i-svg-spinners:90-ring-with-bg text-4xl text-bolt-elements-textSecondary" />
-                      <p className="text-sm text-bolt-elements-textSecondary">Starting preview server...</p>
-                    </>
-                  ) : serverStartError ? (
-                    <>
-                      <div className="i-ph:warning-circle text-4xl text-red-400" />
-                      <p className="text-sm text-red-400">{serverStartError}</p>
-                      <button
-                        onClick={handleStartStaticServer}
-                        className="px-4 py-2 rounded-md bg-bolt-elements-button-primary-background text-bolt-elements-button-primary-text hover:bg-bolt-elements-button-primary-backgroundHover transition-colors text-sm"
-                      >
-                        Retry
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={handleStartStaticServer}
-                        className="flex items-center gap-2 px-6 py-3 rounded-lg bg-bolt-elements-button-primary-background text-bolt-elements-button-primary-text hover:bg-bolt-elements-button-primary-backgroundHover transition-colors text-base font-medium"
-                      >
-                        <span className="i-ph:play-fill text-lg" />
-                        Start Preview Server
-                      </button>
-                      <p className="text-xs text-bolt-elements-textSecondary">
-                        Plain HTML project detected — click to start a static file server
-                      </p>
-                    </>
-                  )}
-                </div>
-              ) : (
-                'No preview available'
-              )}
-            </div>
-          )}
-
-          {isDeviceModeOn && !showDeviceFrameInPreview && (
-            <>
-              {/* Width indicator */}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '-25px',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  background: 'var(--bolt-elements-background-depth-3, rgba(0,0,0,0.7))',
-                  color: 'var(--bolt-elements-textPrimary, white)',
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  fontSize: '12px',
-                  pointerEvents: 'none',
-                  opacity: resizingState.current.isResizing ? 1 : 0,
-                  transition: 'opacity 0.3s',
-                }}
-              >
-                {currentWidth}px
-              </div>
-
-              <ResizeHandle side="left" />
-              <ResizeHandle side="right" />
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+      {isExpo && <ExpoQrModal />}
+    </>
   );
 });
