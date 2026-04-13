@@ -133,3 +133,34 @@ html[data-theme='dark'] {
   --bolt-elements-editor-search-button-backgroundColor: theme('colors.gray.800');
   --bolt-elements-editor-search-button-backgroundColorHover: theme('colors.alpha.white.10');
 }
+
+/*
+ * Streaming glow effect — applied to the active line while AI is generating code.
+ * Uses the theme accent color so it adapts to whichever theme the user selects.
+ */
+@keyframes streaming-glow-pulse {
+  0%, 100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+[data-streaming='true'] .cm-editor .cm-activeLine {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--theme-accent-500) 12%, transparent) 0%,
+    color-mix(in srgb, var(--theme-accent-400) 6%, transparent) 100%
+  );
+  box-shadow: inset 3px 0 0 var(--theme-accent-500),
+    0 0 15px color-mix(in srgb, var(--theme-accent-500) 10%, transparent),
+    0 0 30px color-mix(in srgb, var(--theme-accent-500) 5%, transparent);
+  animation: streaming-glow-pulse 2s ease-in-out infinite;
+}
+
+[data-streaming='true'] .cm-editor .cm-gutters .cm-activeLineGutter {
+  background: color-mix(in srgb, var(--theme-accent-500) 8%, transparent) !important;
+  color: var(--theme-accent-400) !important;
+  box-shadow: inset -1px 0 0 color-mix(in srgb, var(--theme-accent-500) 20%, transparent);
+}
