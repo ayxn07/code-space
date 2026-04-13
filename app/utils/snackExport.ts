@@ -20,21 +20,14 @@ const EXCLUDED_FILES = [
 ];
 
 /**
- * Expo ecosystem package names and prefixes.
- * These are provided automatically by Snack for the selected SDK version,
- * so we must NOT send them with template-specific version constraints
- * (which may be incompatible with the Snack SDK version).
+ * Core packages that Snack auto-provides for the selected SDK version.
+ * Only these should be filtered — everything else must be sent explicitly
+ * so the Snack bundler can resolve them on the device.
  */
-const EXPO_ECOSYSTEM_EXACT = new Set(['expo', 'react', 'react-dom', 'react-native', 'react-native-web', 'typescript']);
+const SNACK_PROVIDED_PACKAGES = new Set(['expo', 'react', 'react-dom', 'react-native', 'react-native-web']);
 
-const EXPO_ECOSYSTEM_PREFIXES = ['expo-', '@expo/', '@react-native/'];
-
-function isExpoEcosystemPackage(name: string): boolean {
-  if (EXPO_ECOSYSTEM_EXACT.has(name)) {
-    return true;
-  }
-
-  return EXPO_ECOSYSTEM_PREFIXES.some((prefix) => name.startsWith(prefix));
+function isSnackProvidedPackage(name: string): boolean {
+  return SNACK_PROVIDED_PACKAGES.has(name);
 }
 
 /**
@@ -102,13 +95,13 @@ export class SnackSession {
     // Build Snack file map
     const snackFiles = buildSnackFiles(files, parsed);
 
-    // Extract non-ecosystem dependencies
-    const allDeps = { ...parsed.dependencies, ...parsed.devDependencies };
-    const snackDependencies = buildSnackDependencies(allDeps);
+    // Extract dependencies (only runtime deps, not devDependencies)
+    const runtimeDeps = parsed.dependencies || {};
+    const snackDependencies = buildSnackDependencies(runtimeDeps);
 
     // Pick the best SDK version
     const supportedVersions = snackSdk.getSupportedSDKVersions();
-    const sdkVersion = pickBestSDKVersion(supportedVersions, allDeps.expo as string | undefined);
+    const sdkVersion = pickBestSDKVersion(supportedVersions, runtimeDeps.expo as string | undefined);
 
     logger.info('Creating live Snack session', {
       fileCount: Object.keys(snackFiles).length,
@@ -198,8 +191,8 @@ export class SnackSession {
 
     const parsed = JSON.parse(pkgJsonContent);
     const snackFiles = buildSnackFiles(files, parsed);
-    const allDeps = { ...parsed.dependencies, ...parsed.devDependencies };
-    const snackDependencies = buildSnackDependencies(allDeps);
+    const runtimeDeps = parsed.dependencies || {};
+    const snackDependencies = buildSnackDependencies(runtimeDeps);
 
     this._snack.updateFiles(snackFiles);
     this._snack.updateDependencies(snackDependencies);
@@ -276,13 +269,14 @@ function buildSnackFiles(files: FileMap, parsedPkgJson: any): Record<string, { t
 }
 
 /**
- * Extract only non-Expo-ecosystem dependencies.
+ * Extract dependencies that Snack needs explicitly.
+ * Only filters out the 5 core packages Snack auto-provides.
  */
-function buildSnackDependencies(allDeps: Record<string, string>): Record<string, { version: string }> {
+function buildSnackDependencies(deps: Record<string, string>): Record<string, { version: string }> {
   const snackDependencies: Record<string, { version: string }> = {};
 
-  for (const [name, version] of Object.entries(allDeps)) {
-    if (typeof version === 'string' && !isExpoEcosystemPackage(name)) {
+  for (const [name, version] of Object.entries(deps)) {
+    if (typeof version === 'string' && !isSnackProvidedPackage(name)) {
       snackDependencies[name] = { version };
     }
   }
