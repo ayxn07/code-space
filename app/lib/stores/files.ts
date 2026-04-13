@@ -79,7 +79,7 @@ export class FilesStore {
     // Load deleted paths from localStorage if available
     try {
       if (typeof localStorage !== 'undefined') {
-        const deletedPathsJson = localStorage.getItem('bolt-deleted-paths');
+        const deletedPathsJson = localStorage.getItem('hackcortex-deleted-paths');
 
         if (deletedPathsJson) {
           const deletedPaths = JSON.parse(deletedPathsJson);
@@ -561,7 +561,7 @@ export class FilesStore {
 
     try {
       if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem('bolt-deleted-paths');
+        localStorage.removeItem('hackcortex-deleted-paths');
       }
     } catch (error) {
       logger.error('Failed to clear deleted paths from localStorage', error);
@@ -945,7 +945,7 @@ export class FilesStore {
   #persistDeletedPaths() {
     try {
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('bolt-deleted-paths', JSON.stringify([...this.#deletedPaths]));
+        localStorage.setItem('hackcortex-deleted-paths', JSON.stringify([...this.#deletedPaths]));
       }
     } catch (error) {
       logger.error('Failed to persist deleted paths to localStorage', error);

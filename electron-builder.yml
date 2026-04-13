@@ -1,5 +1,5 @@
-appId: com.stackblitz.bolt.diy
-productName: Bolt Local
+appId: com.hackcortex.codespace
+productName: Hack Cortex
 directories:
   buildResources: build
   output: dist
@@ -55,8 +55,8 @@ npmRebuild: false
 
 publish:
   provider: github
-  owner: Derek-X-Wang
-  repo: bolt.local
+  owner: ayxn07
+  repo: hackcortex
   private: true
   releaseType: release
 

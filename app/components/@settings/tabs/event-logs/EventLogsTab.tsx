@@ -428,7 +428,7 @@ export function EventLogsTab() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `bolt-event-logs-${new Date().toISOString()}.json`;
+      a.download = `hackcortex-event-logs-${new Date().toISOString()}.json`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -462,7 +462,7 @@ export function EventLogsTab() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `bolt-event-logs-${new Date().toISOString()}.csv`;
+      a.download = `hackcortex-event-logs-${new Date().toISOString()}.csv`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -509,7 +509,7 @@ export function EventLogsTab() {
       doc.setFont('helvetica', 'bold');
       doc.text('Event Logs Report', margin, 35);
 
-      // Add subtitle with bolt.diy
+      // Add subtitle with Hack Cortex
       doc.setFontSize(12);
       doc.setFont('helvetica', 'normal');
       doc.text('Hack Cortex - AI Development Platform', margin, 45);
@@ -747,7 +747,7 @@ export function EventLogsTab() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `bolt-event-logs-${new Date().toISOString()}.txt`;
+      a.download = `hackcortex-event-logs-${new Date().toISOString()}.txt`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);

@@ -54,7 +54,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
       files: any;
       promptId?: string;
       contextOptimization: boolean;
-      chatMode: 'discuss' | 'build';
+      chatMode: 'plan' | 'build';
       designScheme?: DesignScheme;
       supabase?: {
         isConnected: boolean;

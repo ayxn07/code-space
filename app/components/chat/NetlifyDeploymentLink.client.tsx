@@ -14,7 +14,7 @@ export function NetlifyDeploymentLink() {
     }
   }, [connection.token, currentChatId]);
 
-  const deployedSite = connection.stats?.sites?.find((site) => site.name.includes(`bolt-diy-${currentChatId}`));
+  const deployedSite = connection.stats?.sites?.find((site) => site.name.includes(`hackcortex-${currentChatId}`));
 
   if (!deployedSite) {
     return null;

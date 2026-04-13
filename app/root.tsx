@@ -420,7 +420,7 @@ export default function App() {
         codespaceProfile.set(p);
 
         /*
-         * Also populate bolt.diy's own profileStore so all existing UI components
+         * Also populate Hack Cortex's own profileStore so all existing UI components
          * (Menu, AvatarDropdown, UserMessage) show the real name instead of "Guest User".
          * Only seed if the user hasn't already set a custom profile.
          */

@@ -8,7 +8,7 @@ import { allowedHTMLElements } from '~/utils/markdown';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { createScopedLogger } from '~/utils/logger';
 import { createFilesContext, extractPropertiesFromMessage } from './utils';
-import { discussPrompt } from '~/lib/common/prompts/discuss-prompt';
+import { planPrompt } from '~/lib/common/prompts/plan-prompt';
 import type { DesignScheme } from '~/types/design-scheme';
 
 export type Messages = Message[];
@@ -63,7 +63,7 @@ export async function streamText(props: {
   contextFiles?: FileMap;
   summary?: string;
   messageSliceId?: number;
-  chatMode?: 'discuss' | 'build';
+  chatMode?: 'plan' | 'build';
   designScheme?: DesignScheme;
 }) {
   const {
@@ -280,7 +280,7 @@ export async function streamText(props: {
       apiKeys,
       providerSettings,
     }),
-    system: chatMode === 'build' ? systemPrompt : discussPrompt(),
+    system: chatMode === 'build' ? systemPrompt : planPrompt(),
     ...tokenParams,
     messages: convertToCoreMessages(processedMessages as any),
     ...filteredOptions,

@@ -7,7 +7,7 @@
  * Used by the rewritten db.ts to replace IndexedDB with server storage.
  *
  * IMPORTANT: When CODESPACE_API_BASE_URL is not configured (e.g., running
- * bolt.diy standalone without the parent app), all functions gracefully
+ * Hack Cortex standalone without the parent app), all functions gracefully
  * return empty data instead of making requests to the wrong host.
  */
 import { codespaceToken, codespaceApiBaseUrl } from '~/lib/stores/codespace';

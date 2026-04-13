@@ -17,10 +17,11 @@ interface MessagesProps {
   isStreaming?: boolean;
   messages?: Message[];
   append?: (message: Message) => void;
-  chatMode?: 'discuss' | 'build';
-  setChatMode?: (mode: 'discuss' | 'build') => void;
+  chatMode?: 'plan' | 'build';
+  setChatMode?: (mode: 'plan' | 'build') => void;
   model?: string;
   provider?: ProviderInfo;
+  onTemplateSelected?: (templateName: string) => void;
   addToolResult: ({ toolCallId, result }: { toolCallId: string; result: any }) => void;
 }
 
@@ -84,6 +85,7 @@ export const Messages = forwardRef<HTMLDivElement, MessagesProps>(
                         setChatMode={props.setChatMode}
                         model={props.model}
                         provider={props.provider}
+                        onTemplateSelected={props.onTemplateSelected}
                         parts={parts}
                         addToolResult={props.addToolResult}
                       />

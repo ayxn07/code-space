@@ -74,13 +74,14 @@ interface BaseChatProps {
   llmErrorAlert?: LlmErrorAlertType;
   clearLlmErrorAlert?: () => void;
   data?: JSONValue[] | undefined;
-  chatMode?: 'discuss' | 'build';
-  setChatMode?: (mode: 'discuss' | 'build') => void;
+  chatMode?: 'plan' | 'build';
+  setChatMode?: (mode: 'plan' | 'build') => void;
   append?: (message: Message) => void;
   designScheme?: DesignScheme;
   setDesignScheme?: (scheme: DesignScheme) => void;
   selectedElement?: ElementInfo | null;
   setSelectedElement?: (element: ElementInfo | null) => void;
+  onTemplateSelected?: (templateName: string) => void;
   addToolResult?: ({ toolCallId, result }: { toolCallId: string; result: any }) => void;
   onWebSearchResult?: (result: string) => void;
 }
@@ -129,6 +130,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       setDesignScheme,
       selectedElement,
       setSelectedElement,
+      onTemplateSelected,
       addToolResult = () => {
         throw new Error('addToolResult not implemented');
       },
@@ -384,6 +386,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                         setChatMode={setChatMode}
                         provider={provider}
                         model={model}
+                        onTemplateSelected={onTemplateSelected}
                         addToolResult={addToolResult}
                       />
                     ) : null;

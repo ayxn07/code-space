@@ -17,14 +17,24 @@ interface MarkdownProps {
   html?: boolean;
   limitedMarkdown?: boolean;
   append?: (message: Message) => void;
-  chatMode?: 'discuss' | 'build';
-  setChatMode?: (mode: 'discuss' | 'build') => void;
+  chatMode?: 'plan' | 'build';
+  setChatMode?: (mode: 'plan' | 'build') => void;
   model?: string;
   provider?: ProviderInfo;
+  onTemplateSelected?: (templateName: string) => void;
 }
 
 export const Markdown = memo(
-  ({ children, html = false, limitedMarkdown = false, append, setChatMode, model, provider }: MarkdownProps) => {
+  ({
+    children,
+    html = false,
+    limitedMarkdown = false,
+    append,
+    setChatMode,
+    model,
+    provider,
+    onTemplateSelected,
+  }: MarkdownProps) => {
     logger.trace('Render');
 
     const components = useMemo(() => {
@@ -89,6 +99,17 @@ export const Markdown = memo(
 
           if (className?.includes('__boltQuickAction__') || dataProps?.dataBoltQuickAction) {
             return <div className="flex items-center gap-2 flex-wrap mt-3.5">{children}</div>;
+          }
+
+          if (className?.includes('__boltPoll__')) {
+            const question = dataProps?.dataQuestion as string | undefined;
+
+            return (
+              <div className="my-4 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 p-4">
+                {question && <p className="text-sm font-medium text-bolt-elements-textPrimary mb-3">{question}</p>}
+                <div className="flex flex-col gap-2">{children}</div>
+              </div>
+            );
           }
 
           return (
@@ -183,6 +204,46 @@ export const Markdown = memo(
                 }}
               >
                 <div className={`text-lg ${iconClass}`} />
+                {children}
+              </button>
+            );
+          }
+
+          if (
+            dataProps?.class?.toString().includes('__boltPollOption__') ||
+            dataProps?.className?.toString().includes('__boltPollOption__')
+          ) {
+            const value = (dataProps['data-value'] || dataProps.dataValue) as string | undefined;
+
+            return (
+              <button
+                className="w-full text-left rounded-md border border-bolt-elements-borderColor bg-bolt-elements-background-depth-3 px-3 py-2.5 text-sm text-bolt-elements-textPrimary hover:border-bolt-elements-item-contentAccent hover:bg-bolt-elements-item-backgroundAccent/10 transition-colors cursor-pointer"
+                onClick={() => {
+                  if (value) {
+                    // Check if this is a template selection
+                    if (value.startsWith('TEMPLATE:') && onTemplateSelected) {
+                      const templateName = value.replace('TEMPLATE:', '').trim();
+                      onTemplateSelected(templateName);
+
+                      return;
+                    }
+
+                    // Regular poll option — send as user message
+                    if (append) {
+                      append({
+                        id: `poll-answer-${Date.now()}`,
+                        content: [
+                          {
+                            type: 'text',
+                            text: `[Model: ${model}]\n\n[Provider: ${provider?.name}]\n\n${value}`,
+                          },
+                        ] as any,
+                        role: 'user',
+                      });
+                    }
+                  }
+                }}
+              >
                 {children}
               </button>
             );

@@ -57,8 +57,8 @@ interface ChatBoxProps {
   enhancingPrompt?: boolean | undefined;
   enhancePrompt?: (() => void) | undefined;
   onWebSearchResult?: (result: string) => void;
-  chatMode?: 'discuss' | 'build';
-  setChatMode?: (mode: 'discuss' | 'build') => void;
+  chatMode?: 'plan' | 'build';
+  setChatMode?: (mode: 'plan' | 'build') => void;
   designScheme?: DesignScheme;
   setDesignScheme?: (scheme: DesignScheme) => void;
   selectedElement?: ElementInfo | null;
@@ -239,7 +239,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
             maxHeight: props.TEXTAREA_MAX_HEIGHT,
           }}
           placeholder={
-            props.chatMode === 'build' ? 'How can Hack Cortex help you today?' : 'What would you like to discuss?'
+            props.chatMode === 'build' ? 'How can Hack Cortex help you today?' : 'Describe what you want to build...'
           }
           translate="no"
         />
@@ -292,23 +292,21 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
               onStop={props.stopListening}
               disabled={props.isStreaming}
             />
-            {props.chatStarted && (
-              <IconButton
-                title="Discuss"
-                className={classNames(
-                  'transition-all flex items-center gap-1 px-1.5',
-                  props.chatMode === 'discuss'
-                    ? '!bg-bolt-elements-item-backgroundAccent !text-bolt-elements-item-contentAccent'
-                    : 'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault',
-                )}
-                onClick={() => {
-                  props.setChatMode?.(props.chatMode === 'discuss' ? 'build' : 'discuss');
-                }}
-              >
-                <div className={`i-ph:chats text-xl`} />
-                {props.chatMode === 'discuss' ? <span>Discuss</span> : <span />}
-              </IconButton>
-            )}
+            <IconButton
+              title={props.chatMode === 'plan' ? 'Switch to Build' : 'Switch to Plan'}
+              className={classNames(
+                'transition-all flex items-center gap-1 px-1.5',
+                props.chatMode === 'plan'
+                  ? '!bg-bolt-elements-item-backgroundAccent !text-bolt-elements-item-contentAccent'
+                  : 'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault',
+              )}
+              onClick={() => {
+                props.setChatMode?.(props.chatMode === 'plan' ? 'build' : 'plan');
+              }}
+            >
+              <div className={props.chatMode === 'plan' ? 'i-ph:compass text-xl' : 'i-ph:hammer text-xl'} />
+              {props.chatMode === 'plan' ? <span>Plan</span> : <span>Build</span>}
+            </IconButton>
             <IconButton
               title="Model Settings"
               className={classNames('transition-all flex items-center gap-1', {

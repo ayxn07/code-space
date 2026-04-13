@@ -114,7 +114,7 @@ export const ChatImpl = memo(
     const { showChat } = useStore(chatStore);
     const [animationScope, animate] = useAnimate();
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
-    const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
+    const [chatMode, setChatMode] = useState<'plan' | 'build'>('plan');
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
     const mcpSettings = useMCPStore((state) => state.settings);
 
@@ -413,7 +413,7 @@ export const ChatImpl = memo(
       if (!chatStarted) {
         setFakeLoading(true);
 
-        if (autoSelectTemplate) {
+        if (autoSelectTemplate && chatMode === 'build') {
           const { template, title } = await selectStarterTemplate({
             message: finalMessageContent,
             model,
@@ -609,6 +609,60 @@ export const ChatImpl = memo(
       [input, handleInputChange],
     );
 
+    const handleTemplateSelected = useCallback(
+      async (templateName: string) => {
+        try {
+          setFakeLoading(true);
+
+          const temResp = await getTemplates(templateName).catch((e) => {
+            if (e.message.includes('rate limit')) {
+              toast.warning('Rate limit exceeded. Could not load starter template.');
+            } else {
+              toast.warning('Failed to import starter template.');
+            }
+
+            return null;
+          });
+
+          if (temResp) {
+            const { assistantMessage, userMessage } = temResp;
+
+            // Append template files as an assistant message, then a hidden user follow-up
+            append({
+              id: `template-files-${Date.now()}`,
+              role: 'assistant',
+              content: assistantMessage,
+            });
+
+            // Switch to build mode
+            setChatMode('build');
+
+            // Send the follow-up user message to continue the conversation in build mode
+            append({
+              id: `template-continue-${Date.now()}`,
+              role: 'user',
+              content: `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${userMessage}`,
+            });
+          } else {
+            // Template fetch failed — just send the selection as a regular message
+            append({
+              id: `template-fallback-${Date.now()}`,
+              role: 'user',
+              content: `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\nI selected the ${templateName} template. Please continue with a blank project instead.`,
+            });
+            setChatMode('build');
+          }
+
+          setFakeLoading(false);
+        } catch (error) {
+          console.error('Template selection error:', error);
+          toast.error('Failed to load template');
+          setFakeLoading(false);
+        }
+      },
+      [model, provider, append, setChatMode],
+    );
+
     return (
       <BaseChat
         ref={animationScope}
@@ -678,6 +732,7 @@ export const ChatImpl = memo(
         setDesignScheme={setDesignScheme}
         selectedElement={selectedElement}
         setSelectedElement={setSelectedElement}
+        onTemplateSelected={handleTemplateSelected}
         addToolResult={addToolResult}
         onWebSearchResult={handleWebSearchResult}
       />

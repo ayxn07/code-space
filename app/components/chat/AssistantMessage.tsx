@@ -25,10 +25,11 @@ interface AssistantMessageProps {
   onRewind?: (messageId: string) => void;
   onFork?: (messageId: string) => void;
   append?: (message: Message) => void;
-  chatMode?: 'discuss' | 'build';
-  setChatMode?: (mode: 'discuss' | 'build') => void;
+  chatMode?: 'plan' | 'build';
+  setChatMode?: (mode: 'plan' | 'build') => void;
   model?: string;
   provider?: ProviderInfo;
+  onTemplateSelected?: (templateName: string) => void;
   parts:
     | (TextUIPart | ReasoningUIPart | ToolInvocationUIPart | SourceUIPart | FileUIPart | StepStartUIPart)[]
     | undefined;
@@ -71,6 +72,7 @@ export const AssistantMessage = memo(
     setChatMode,
     model,
     provider,
+    onTemplateSelected,
     parts,
     addToolResult,
   }: AssistantMessageProps) => {
@@ -176,7 +178,15 @@ export const AssistantMessage = memo(
             </div>
           </div>
         </>
-        <Markdown append={append} chatMode={chatMode} setChatMode={setChatMode} model={model} provider={provider} html>
+        <Markdown
+          append={append}
+          chatMode={chatMode}
+          setChatMode={setChatMode}
+          model={model}
+          provider={provider}
+          onTemplateSelected={onTemplateSelected}
+          html
+        >
           {content}
         </Markdown>
         {toolInvocations && toolInvocations.length > 0 && (

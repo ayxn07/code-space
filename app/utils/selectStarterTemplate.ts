@@ -160,11 +160,11 @@ export async function getTemplates(templateName: string, title?: string) {
      */
   }
 
-  // exclude    .bolt
-  filteredFiles = filteredFiles.filter((x) => x.path.startsWith('.bolt') == false);
+  // exclude    .hackcortex
+  filteredFiles = filteredFiles.filter((x) => x.path.startsWith('.hackcortex') == false);
 
-  // check for ignore file in .bolt folder
-  const templateIgnoreFile = files.find((x) => x.path.startsWith('.bolt') && x.name == 'ignore');
+  // check for ignore file in .hackcortex folder
+  const templateIgnoreFile = files.find((x) => x.path.startsWith('.hackcortex') && x.name == 'ignore');
 
   const filesToImport = {
     files: filteredFiles,
@@ -197,7 +197,7 @@ ${file.content}
 </boltArtifact>
 `;
   let userMessage = ``;
-  const templatePromptFile = files.filter((x) => x.path.startsWith('.bolt')).find((x) => x.name == 'prompt');
+  const templatePromptFile = files.filter((x) => x.path.startsWith('.hackcortex')).find((x) => x.name == 'prompt');
 
   if (templatePromptFile) {
     userMessage = `

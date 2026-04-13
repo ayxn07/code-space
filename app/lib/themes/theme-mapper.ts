@@ -1,7 +1,7 @@
 /**
  * Theme Mapper
  *
- * Maps a ThemePreset (from the main app) to bolt.diy's CSS custom properties.
+ * Maps a ThemePreset (from the main app) to Hack Cortex's CSS custom properties.
  * Called at runtime — sets properties directly on document.documentElement.style
  * so they override the static SCSS defaults without a rebuild.
  */
