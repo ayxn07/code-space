@@ -58,8 +58,17 @@ export async function newShellProcess(webcontainer: WebContainer, terminal: ITer
     }),
   );
 
+  /*
+   * Track whether this handler is still active.
+   * When the terminal is reset, the old handler is disabled
+   * via the returned cleanup function before a new one is registered.
+   */
+  let handlerActive = true;
+
   terminal.onData((data) => {
-    // console.log('terminal onData', { data, isInteractive });
+    if (!handlerActive) {
+      return;
+    }
 
     if (isInteractive) {
       input.write(data);
@@ -86,7 +95,7 @@ export async function newShellProcess(webcontainer: WebContainer, terminal: ITer
 
   await jshReady.promise;
 
-  return process;
+  return { process, cleanup: () => (handlerActive = false) };
 }
 
 export type ExecutionResult = { output: string; exitCode: number } | undefined;
@@ -103,6 +112,13 @@ export class BoltShell {
   #outputStream: ReadableStreamDefaultReader<string> | undefined;
   #shellInputStream: WritableStreamDefaultWriter<string> | undefined;
 
+  /*
+   * Disables the previous terminal.onData handler when a new shell process
+   * is spawned (e.g. via the Reset Terminal button). Without this, each
+   * init() call stacks a new handler and keystrokes get duplicated.
+   */
+  #onDataDisabler: (() => void) | undefined;
+
   constructor() {
     this.#readyPromise = new Promise((resolve) => {
       this.#initialized = resolve;
@@ -117,10 +133,14 @@ export class BoltShell {
     this.#webcontainer = webcontainer;
     this.#terminal = terminal;
 
+    // Disable the previous terminal.onData handler to prevent keystroke duplication
+    this.#onDataDisabler?.();
+
     // Use all three streams from tee: one for terminal, one for command execution, one for Expo URL detection
-    const { process, commandStream, expoUrlStream } = await this.newBoltShellProcess(webcontainer, terminal);
+    const { process, commandStream, expoUrlStream, cleanup } = await this.newBoltShellProcess(webcontainer, terminal);
     this.#process = process;
     this.#outputStream = commandStream.getReader();
+    this.#onDataDisabler = cleanup;
 
     // Start background Expo URL watcher immediately
     this._watchExpoUrlInBackground(expoUrlStream);
@@ -164,7 +184,18 @@ export class BoltShell {
       }),
     );
 
+    /*
+     * Guard this handler with a flag so it can be disabled when the shell is
+     * re-initialised (e.g. via the Reset Terminal button). Without this, each
+     * init() call stacks a new handler and every keystroke is sent N times.
+     */
+    let handlerActive = true;
+
     terminal.onData((data) => {
+      if (!handlerActive) {
+        return;
+      }
+
       if (isInteractive) {
         input.write(data);
       }
@@ -172,8 +203,16 @@ export class BoltShell {
 
     await jshReady.promise;
 
-    // Return all streams for use in init
-    return { process, terminalStream: streamA, commandStream: streamC, expoUrlStream: streamD };
+    // Return all streams + cleanup function for use in init
+    return {
+      process,
+      terminalStream: streamA,
+      commandStream: streamC,
+      expoUrlStream: streamD,
+      cleanup: () => {
+        handlerActive = false;
+      },
+    };
   }
 
   // Dedicated background watcher for Expo URL

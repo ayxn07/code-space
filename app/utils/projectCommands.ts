@@ -15,15 +15,24 @@ interface FileContent {
 
 // Helper function to make any command non-interactive
 function makeNonInteractive(command: string): string {
-  // Set environment variables for non-interactive mode
-  const envVars = 'export CI=true DEBIAN_FRONTEND=noninteractive FORCE_COLOR=0';
+  /*
+   * Use inline env vars (VAR=val command) instead of `export VAR=val && command`.
+   * WebContainer's jsh shell does not reliably support multi-variable `export`
+   * (e.g. `export A=1 B=2 C=3`), which can silently fail and block subsequent
+   * `&&`-chained commands from running.
+   *
+   * CI=true is already set by WebContainer, but we set it explicitly for
+   * consistency. DEBIAN_FRONTEND and FORCE_COLOR prevent interactive prompts
+   * and colored output that can confuse terminal output parsing.
+   */
+  const envPrefix = 'CI=true DEBIAN_FRONTEND=noninteractive FORCE_COLOR=0';
 
   // Common interactive packages and their non-interactive flags
   const interactivePackages = [
     { pattern: /npx\s+([^@\s]+@?[^\s]*)\s+init/g, replacement: 'echo "y" | npx --yes $1 init --defaults --yes' },
     { pattern: /npx\s+create-([^\s]+)/g, replacement: 'npx --yes create-$1 --template default' },
     { pattern: /npx\s+([^@\s]+@?[^\s]*)\s+add/g, replacement: 'npx --yes $1 add --defaults --yes' },
-    { pattern: /npm\s+install(?!\s+--)/g, replacement: 'npm install --yes --no-audit --no-fund --silent' },
+    { pattern: /npm\s+install(?!\s+--)/g, replacement: 'npm install --no-audit --no-fund' },
     { pattern: /yarn\s+add(?!\s+--)/g, replacement: 'yarn add --non-interactive' },
     { pattern: /pnpm\s+add(?!\s+--)/g, replacement: 'pnpm add --yes' },
   ];
@@ -35,7 +44,7 @@ function makeNonInteractive(command: string): string {
     processedCommand = processedCommand.replace(pattern, replacement);
   });
 
-  return `${envVars} && ${processedCommand}`;
+  return `${envPrefix} ${processedCommand}`;
 }
 
 export async function detectProjectCommands(files: FileContent[]): Promise<ProjectCommands> {
@@ -61,12 +70,18 @@ export async function detectProjectCommands(files: FileContent[]): Promise<Proje
         Object.keys(dependencies).some((dep) => dep.includes('shadcn')) ||
         hasFile('components.json');
 
+      // Check if this is an Expo project
+      const isExpoProject = 'expo' in dependencies;
+
       // Check for preferred commands in priority order
       const preferredCommands = ['dev', 'start', 'preview'];
       const availableCommand = preferredCommands.find((cmd) => scripts[cmd]);
 
-      // Build setup command with non-interactive handling
-      let baseSetupCommand = 'npx update-browserslist-db@latest && npm install';
+      /*
+       * Build setup command with non-interactive handling.
+       * Skip browserslist update for Expo projects — it's unnecessary and can hang in WebContainer.
+       */
+      let baseSetupCommand = isExpoProject ? 'npm install' : 'npx update-browserslist-db@latest && npm install';
 
       // Add shadcn init if it's a shadcn project
       if (isShadcnProject) {

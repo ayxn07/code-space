@@ -6,7 +6,7 @@ import { coloredText } from '~/utils/terminal';
 
 export class TerminalStore {
   #webcontainer: Promise<WebContainer>;
-  #terminals: Array<{ terminal: ITerminal; process: WebContainerProcess }> = [];
+  #terminals: Array<{ terminal: ITerminal; process: WebContainerProcess; cleanup: () => void }> = [];
   #boltTerminal = newBoltShellProcess();
 
   showTerminal: WritableAtom<boolean> = import.meta.hot?.data.showTerminal ?? atom(true);
@@ -37,8 +37,29 @@ export class TerminalStore {
 
   async attachTerminal(terminal: ITerminal) {
     try {
-      const shellProcess = await newShellProcess(await this.#webcontainer, terminal);
-      this.#terminals.push({ terminal, process: shellProcess });
+      /*
+       * If this terminal already exists (e.g. the Reset Terminal button was
+       * clicked), clean up the old handler and kill the old process before
+       * creating a new shell. This prevents stacking onData handlers which
+       * causes character duplication ("nnnpppmmm" instead of "npm").
+       */
+      const existingIdx = this.#terminals.findIndex((t) => t.terminal === terminal);
+
+      if (existingIdx !== -1) {
+        const existing = this.#terminals[existingIdx];
+        existing.cleanup();
+
+        try {
+          existing.process.kill();
+        } catch {
+          // process may have already exited
+        }
+
+        this.#terminals.splice(existingIdx, 1);
+      }
+
+      const { process: shellProcess, cleanup } = await newShellProcess(await this.#webcontainer, terminal);
+      this.#terminals.push({ terminal, process: shellProcess, cleanup });
     } catch (error: any) {
       terminal.write(coloredText.red('Failed to spawn shell\n\n') + error.message);
       return;
@@ -55,7 +76,9 @@ export class TerminalStore {
     const terminalIndex = this.#terminals.findIndex((t) => t.terminal === terminal);
 
     if (terminalIndex !== -1) {
-      const { process } = this.#terminals[terminalIndex];
+      const { process, cleanup } = this.#terminals[terminalIndex];
+
+      cleanup();
 
       try {
         process.kill();
