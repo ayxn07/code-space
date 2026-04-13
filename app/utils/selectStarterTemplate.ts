@@ -2,7 +2,6 @@ import ignore from 'ignore';
 import type { ProviderInfo } from '~/types/model';
 import type { Template } from '~/types/template';
 import { STARTER_TEMPLATES } from './constants';
-import { detectProjectCommands } from './projectCommands';
 
 const starterTemplateSelectionPrompt = (templates: Template[]) => `
 You are an experienced developer who helps people choose the best starter template for their projects.
@@ -184,17 +183,19 @@ export async function getTemplates(templateName: string, title?: string) {
     filesToImport.ignoreFile = ignoredFiles;
   }
 
-  // Detect setup/start commands from template files
-  const commands = await detectProjectCommands(filesToImport.files);
+  // Detect the start script from package.json for the Run button
+  let startScript = 'dev';
+  const packageJsonFile = filesToImport.files.find((f) => f.path.endsWith('package.json'));
 
-  let commandActions = '';
-
-  if (commands.setupCommand) {
-    commandActions += `\n<boltAction type="shell">${commands.setupCommand}</boltAction>`;
-  }
-
-  if (commands.startCommand) {
-    commandActions += `\n<boltAction type="start">${commands.startCommand}</boltAction>`;
+  if (packageJsonFile) {
+    try {
+      const packageJson = JSON.parse(packageJsonFile.content);
+      const scripts = packageJson?.scripts || {};
+      const preferredCommands = ['dev', 'start', 'preview'];
+      startScript = preferredCommands.find((cmd) => scripts[cmd]) || 'dev';
+    } catch {
+      // fallback to 'dev'
+    }
   }
 
   const assistantMessage = `
@@ -207,8 +208,15 @@ ${filesToImport.files
 ${file.content}
 </boltAction>`,
   )
-  .join('\n')}${commandActions}
+  .join('\n')}
 </boltArtifact>
+
+Your project files are ready! Click the buttons below to install dependencies and start the dev server.
+
+<bolt-quick-actions>
+<bolt-quick-action type="shell" message="npm install">Install Dependencies</bolt-quick-action>
+<bolt-quick-action type="shell" message="npm run ${startScript}">Start Dev Server</bolt-quick-action>
+</bolt-quick-actions>
 `;
   let userMessage = ``;
   const templatePromptFile = files.filter((x) => x.path.startsWith('.hackcortex')).find((x) => x.name == 'prompt');

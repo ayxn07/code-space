@@ -9,6 +9,7 @@ import type { Message } from 'ai';
 import styles from './Markdown.module.scss';
 import ThoughtBox from './ThoughtBox';
 import type { ProviderInfo } from '~/types/model';
+import { workbenchStore } from '~/lib/stores/workbench';
 
 const logger = createScopedLogger('MarkdownComponent');
 
@@ -154,6 +155,7 @@ export const Markdown = memo(
               message: 'i-ph:chats',
               implement: 'i-ph:code',
               link: 'i-ph:link',
+              shell: 'i-ph:terminal',
             };
 
             const safeType = typeof type === 'string' ? type : '';
@@ -169,6 +171,13 @@ export const Markdown = memo(
                 onClick={() => {
                   if (type === 'file') {
                     openArtifactInWorkbench(path);
+                  } else if (type === 'shell') {
+                    const shell = workbenchStore.boltTerminal;
+
+                    if (shell.terminal) {
+                      workbenchStore.toggleTerminal(true);
+                      shell.terminal.input(String(message) + '\n');
+                    }
                   } else if (type === 'message' && append) {
                     append({
                       id: `quick-action-message-${Date.now()}`,
