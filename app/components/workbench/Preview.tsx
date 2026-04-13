@@ -10,6 +10,7 @@ import type { ElementInfo } from './Inspector';
 import { webcontainer } from '~/lib/webcontainer';
 import { WORK_DIR } from '~/utils/constants';
 import { isExpoProject, exportToExpoSnack } from '~/utils/snackExport';
+import { toast } from 'react-toastify';
 
 type ResizeSide = 'left' | 'right' | null;
 
@@ -724,8 +725,10 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
     try {
       const url = await exportToExpoSnack(filesStore);
       window.open(url, '_blank');
+      toast.success('Opened in Expo Snack');
     } catch (error: any) {
       console.error('[Preview] Failed to export to Expo Snack:', error);
+      toast.error(error?.message || 'Failed to export to Expo Snack');
     } finally {
       setIsExportingToSnack(false);
     }
