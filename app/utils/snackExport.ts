@@ -24,10 +24,15 @@ const EXCLUDED_FILES = [
  * These are provided automatically by Snack for the selected SDK version,
  * so we must NOT send them with template-specific version constraints
  * (which may be incompatible with the Snack SDK version).
+ *
+ * NOTE: `react-native-*` community packages (e.g. react-native-svg,
+ * react-native-reanimated) are NOT filtered — Snack does not auto-provide
+ * them, so they must be sent as explicit dependencies. Only `react-native`
+ * core and `react-native-web` are exact-matched above.
  */
 const EXPO_ECOSYSTEM_EXACT = new Set(['expo', 'react', 'react-dom', 'react-native', 'react-native-web', 'typescript']);
 
-const EXPO_ECOSYSTEM_PREFIXES = ['expo-', '@expo/', 'react-native-', '@react-native/', '@react-navigation/'];
+const EXPO_ECOSYSTEM_PREFIXES = ['expo-', '@expo/', '@react-native/', '@react-navigation/'];
 
 function isExpoEcosystemPackage(name: string): boolean {
   if (EXPO_ECOSYSTEM_EXACT.has(name)) {
