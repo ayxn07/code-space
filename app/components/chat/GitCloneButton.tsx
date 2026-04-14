@@ -1,7 +1,7 @@
 import ignore from 'ignore';
 import { useGit } from '~/lib/hooks/useGit';
 import type { Message } from 'ai';
-import { detectProjectCommands, createCommandsMessage, escapeBoltTags } from '~/utils/projectCommands';
+import { escapeBoltTags, getSetupButtonsMarkup } from '~/utils/projectCommands';
 import { generateId } from '~/utils/fileUtils';
 import { useState } from 'react';
 import { toast } from 'react-toastify';
@@ -117,8 +117,7 @@ export default function GitCloneButton({ importChat, className }: GitCloneButton
           }
         }
 
-        const commands = await detectProjectCommands(fileContents);
-        const commandsMessage = createCommandsMessage(commands);
+        const setupButtons = getSetupButtonsMarkup(fileContents);
 
         const filesMessage: Message = {
           role: 'assistant',
@@ -139,16 +138,13 @@ ${escapeBoltTags(file.content)}
 </boltAction>`,
   )
   .join('\n')}
-</boltArtifact>`,
+</boltArtifact>
+${setupButtons}`,
           id: generateId(),
           createdAt: new Date(),
         };
 
         const messages = [filesMessage];
-
-        if (commandsMessage) {
-          messages.push(commandsMessage);
-        }
 
         await importChat(`Git Project:${repoUrl.split('/').slice(-1)[0]}`, messages);
       }

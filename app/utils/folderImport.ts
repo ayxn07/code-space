@@ -1,6 +1,6 @@
 import type { Message } from 'ai';
 import { generateId } from './fileUtils';
-import { detectProjectCommands, createCommandsMessage, escapeBoltTags } from './projectCommands';
+import { escapeBoltTags, getSetupButtonsMarkup } from './projectCommands';
 
 export const createChatFromFolder = async (
   files: File[],
@@ -26,8 +26,7 @@ export const createChatFromFolder = async (
     }),
   );
 
-  const commands = await detectProjectCommands(fileArtifacts);
-  const commandsMessage = createCommandsMessage(commands);
+  const setupButtons = getSetupButtonsMarkup(fileArtifacts);
 
   const binaryFilesMessage =
     binaryFiles.length > 0
@@ -46,7 +45,8 @@ ${escapeBoltTags(file.content)}
 </boltAction>`,
   )
   .join('\n\n')}
-</boltArtifact>`,
+</boltArtifact>
+${setupButtons}`,
     id: generateId(),
     createdAt: new Date(),
   };
@@ -59,15 +59,6 @@ ${escapeBoltTags(file.content)}
   };
 
   const messages = [userMessage, filesMessage];
-
-  if (commandsMessage) {
-    messages.push({
-      role: 'user',
-      id: generateId(),
-      content: 'Setup the codebase and Start the application',
-    });
-    messages.push(commandsMessage);
-  }
 
   return messages;
 };

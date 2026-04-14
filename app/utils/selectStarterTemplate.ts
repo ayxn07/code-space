@@ -2,6 +2,7 @@ import ignore from 'ignore';
 import type { ProviderInfo } from '~/types/model';
 import type { Template } from '~/types/template';
 import { STARTER_TEMPLATES } from './constants';
+import { getSetupButtonsMarkup } from './projectCommands';
 
 const starterTemplateSelectionPrompt = (templates: Template[]) => `
 You are an experienced developer who helps people choose the best starter template for their projects.
@@ -183,20 +184,7 @@ export async function getTemplates(templateName: string, title?: string) {
     filesToImport.ignoreFile = ignoredFiles;
   }
 
-  // Detect the start script from package.json for the Run button
-  let startScript = 'dev';
-  const packageJsonFile = filesToImport.files.find((f) => f.path.endsWith('package.json'));
-
-  if (packageJsonFile) {
-    try {
-      const packageJson = JSON.parse(packageJsonFile.content);
-      const scripts = packageJson?.scripts || {};
-      const preferredCommands = ['dev', 'start', 'preview'];
-      startScript = preferredCommands.find((cmd) => scripts[cmd]) || 'dev';
-    } catch {
-      // fallback to 'dev'
-    }
-  }
+  const setupButtons = getSetupButtonsMarkup(filesToImport.files);
 
   const assistantMessage = `
 Hack Cortex is initializing your project with the required files using the ${template.name} template.
@@ -211,12 +199,8 @@ ${file.content}
   .join('\n')}
 </boltArtifact>
 
-Your project files are ready! Click the buttons below to install dependencies and start the dev server.
-
-<bolt-quick-actions>
-<bolt-quick-action type="shell" message="npm install">Install Dependencies</bolt-quick-action>
-<bolt-quick-action type="shell" message="npm run ${startScript}">Start Dev Server</bolt-quick-action>
-</bolt-quick-actions>
+Your project files are ready!
+${setupButtons}
 `;
   let userMessage = ``;
   const templatePromptFile = files.filter((x) => x.path.startsWith('.hackcortex')).find((x) => x.name == 'prompt');

@@ -152,6 +152,28 @@ ${commandString}
   };
 }
 
+/**
+ * Generates quick-action buttons markup for Install + Run.
+ * Detects the correct start script from package.json among the provided files.
+ */
+export function getSetupButtonsMarkup(files: FileContent[]): string {
+  let startScript = 'dev';
+  const packageJsonFile = files.find((f) => f.path.endsWith('package.json'));
+
+  if (packageJsonFile) {
+    try {
+      const packageJson = JSON.parse(packageJsonFile.content);
+      const scripts = packageJson?.scripts || {};
+      const preferredCommands = ['dev', 'start', 'preview'];
+      startScript = preferredCommands.find((cmd) => scripts[cmd]) || 'dev';
+    } catch {
+      // fallback to 'dev'
+    }
+  }
+
+  return `\nClick the buttons below to install dependencies and start the dev server.\n\n<bolt-quick-actions>\n<bolt-quick-action type="shell" message="npm install">Install Dependencies</bolt-quick-action>\n<bolt-quick-action type="shell" message="npm run ${startScript}">Start Dev Server</bolt-quick-action>\n</bolt-quick-actions>`;
+}
+
 export function escapeBoltArtifactTags(input: string) {
   // Regular expression to match boltArtifact tags and their content
   const regex = /(<boltArtifact[^>]*>)([\s\S]*?)(<\/boltArtifact>)/g;

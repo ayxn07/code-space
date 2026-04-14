@@ -7,7 +7,7 @@ import { BaseChat } from '~/components/chat/BaseChat';
 import { Chat } from '~/components/chat/Chat.client';
 import { useGit } from '~/lib/hooks/useGit';
 import { useChatHistory } from '~/lib/persistence';
-import { createCommandsMessage, detectProjectCommands, escapeBoltTags } from '~/utils/projectCommands';
+import { escapeBoltTags, getSetupButtonsMarkup } from '~/utils/projectCommands';
 import { LoadingOverlay } from '~/components/ui/LoadingOverlay';
 import { toast } from 'react-toastify';
 
@@ -69,8 +69,7 @@ export function GitUrlImport() {
             })
             .filter((f) => f.content);
 
-          const commands = await detectProjectCommands(fileContents);
-          const commandsMessage = createCommandsMessage(commands);
+          const setupButtons = getSetupButtonsMarkup(fileContents);
 
           const filesMessage: Message = {
             role: 'assistant',
@@ -84,21 +83,13 @@ ${escapeBoltTags(file.content)}
 </boltAction>`,
   )
   .join('\n')}
-</boltArtifact>`,
+</boltArtifact>
+${setupButtons}`,
             id: generateId(),
             createdAt: new Date(),
           };
 
           const messages = [filesMessage];
-
-          if (commandsMessage) {
-            messages.push({
-              role: 'user',
-              id: generateId(),
-              content: 'Setup the codebase and Start the application',
-            });
-            messages.push(commandsMessage);
-          }
 
           await importChat(`Git Project:${repoUrl.split('/').slice(-1)[0]}`, messages, { gitUrl: repoUrl });
         }
