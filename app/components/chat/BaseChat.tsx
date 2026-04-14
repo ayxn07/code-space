@@ -164,7 +164,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         if (saved) {
           const width = parseInt(saved, 10);
 
-          if (!isNaN(width) && width >= 400) {
+          if (!isNaN(width) && width >= 480) {
             document.documentElement.style.setProperty('--chat-min-width', `${width}px`);
           }
         }
@@ -187,9 +187,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         const containerWidth = containerRect.width;
         let newChatWidth = moveEvent.clientX - containerRect.left;
 
-        // Constraints: min 400px, max 65% of container
-        const minWidth = 400;
-        const maxWidth = containerWidth * 0.65;
+        // Constraints: min 480px chat, max 60% of container, ensure workbench gets at least 400px
+        const handleWidth = 6;
+        const minWidth = 480;
+        const maxWidth = Math.min(containerWidth * 0.6, containerWidth - 400 - handleWidth);
         newChatWidth = Math.max(minWidth, Math.min(maxWidth, newChatWidth));
 
         document.documentElement.style.setProperty('--chat-min-width', `${newChatWidth}px`);
@@ -587,16 +588,12 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
           {/* Drag handle for resizing chat/workbench panels */}
           {chatStarted && showWorkbench && (
             <div
-              className="hidden lg:flex flex-col items-center justify-center w-[var(--resize-handle-width)] shrink-0 cursor-col-resize group hover:bg-bolt-elements-borderColor/30 active:bg-accent-500/20 transition-colors relative z-[4]"
+              className="hidden lg:flex flex-col items-center justify-center w-[var(--resize-handle-width)] shrink-0 cursor-col-resize group relative z-[4]"
               onMouseDown={handleResizeMouseDown}
               onDoubleClick={handleResizeDoubleClick}
               title="Drag to resize. Double-click to reset."
             >
-              <div className="flex flex-col gap-1 items-center">
-                <div className="w-1 h-1 rounded-full bg-bolt-elements-textTertiary group-hover:bg-accent-500 transition-colors" />
-                <div className="w-1 h-1 rounded-full bg-bolt-elements-textTertiary group-hover:bg-accent-500 transition-colors" />
-                <div className="w-1 h-1 rounded-full bg-bolt-elements-textTertiary group-hover:bg-accent-500 transition-colors" />
-              </div>
+              <div className="w-px h-full bg-bolt-elements-borderColor/30 group-hover:bg-accent-500/40 transition-colors" />
             </div>
           )}
           <ClientOnly>
