@@ -37,7 +37,12 @@ export class PreviewsStore {
     if (this.#broadcastChannel) {
       // Listen for preview updates from other tabs
       this.#broadcastChannel.onmessage = (event) => {
-        const { type, previewId } = event.data;
+        const { type, previewId, source } = event.data;
+
+        // Ignore messages from our own tab to prevent self-loops
+        if (source === this._getTabId()) {
+          return;
+        }
 
         if (type === 'file-change') {
           const timestamp = event.data.timestamp;
@@ -59,16 +64,6 @@ export class PreviewsStore {
         if (storage && source !== this._getTabId()) {
           this._syncStorage(storage);
         }
-      };
-    }
-
-    // Override localStorage setItem to catch all changes
-    if (typeof window !== 'undefined') {
-      const originalSetItem = localStorage.setItem;
-
-      localStorage.setItem = (...args) => {
-        originalSetItem.apply(localStorage, args);
-        this._broadcastStorageSync();
       };
     }
 
@@ -122,25 +117,6 @@ export class PreviewsStore {
           console.error('[Preview] Error syncing storage:', error);
         }
       });
-
-      // Force a refresh after syncing storage
-      const previews = this.previews.get();
-      previews.forEach((preview) => {
-        const previewId = this.getPreviewId(preview.baseUrl);
-
-        if (previewId) {
-          this.refreshPreview(previewId);
-        }
-      });
-
-      // Reload the page content
-      if (typeof window !== 'undefined' && window.location) {
-        const iframe = document.querySelector('iframe');
-
-        if (iframe) {
-          iframe.src = iframe.src;
-        }
-      }
     }
   }
 
@@ -226,7 +202,7 @@ export class PreviewsStore {
     });
   }
 
-  // Broadcast file change to all tabs
+  // Broadcast file change to other tabs
   broadcastFileChange(previewId: string) {
     const timestamp = Date.now();
     this.#lastUpdate.set(previewId, timestamp);
@@ -235,10 +211,11 @@ export class PreviewsStore {
       type: 'file-change',
       previewId,
       timestamp,
+      source: this._getTabId(),
     });
   }
 
-  // Broadcast update to all tabs
+  // Broadcast update to other tabs
   broadcastUpdate(url: string) {
     const previewId = this.getPreviewId(url);
 
@@ -250,6 +227,7 @@ export class PreviewsStore {
         type: 'file-change',
         previewId,
         timestamp,
+        source: this._getTabId(),
       });
     }
   }
