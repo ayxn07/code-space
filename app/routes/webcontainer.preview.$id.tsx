@@ -1,6 +1,6 @@
 import { json, type LoaderFunctionArgs } from '@remix-run/cloudflare';
 import { useLoaderData } from '@remix-run/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useMemo } from 'react';
 
 const PREVIEW_CHANNEL = 'preview-updates';
 
@@ -18,32 +18,38 @@ export default function WebContainerPreview() {
   const { previewId } = useLoaderData<typeof loader>();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const broadcastChannelRef = useRef<BroadcastChannel>();
-  const [previewUrl, setPreviewUrl] = useState('');
 
-  // Handle preview refresh
+  // URL is deterministic from previewId — no state needed
+  const previewUrl = useMemo(() => `https://${previewId}.local-credentialless.webcontainer-api.io`, [previewId]);
+
+  // Use a ref so the broadcast handler always sees the latest URL without re-subscribing
+  const previewUrlRef = useRef(previewUrl);
+  previewUrlRef.current = previewUrl;
+
+  // Handle preview refresh — stable ref, never changes identity
   const handleRefresh = useCallback(() => {
-    if (iframeRef.current && previewUrl) {
+    if (iframeRef.current && previewUrlRef.current) {
       // Force a clean reload
       iframeRef.current.src = '';
       requestAnimationFrame(() => {
         if (iframeRef.current) {
-          iframeRef.current.src = previewUrl;
+          iframeRef.current.src = previewUrlRef.current;
         }
       });
     }
-  }, [previewUrl]);
+  }, []);
 
-  // Notify other tabs that this preview is ready
+  // Notify other tabs that this preview is ready — stable ref
   const notifyPreviewReady = useCallback(() => {
-    if (broadcastChannelRef.current && previewUrl) {
+    if (broadcastChannelRef.current && previewUrlRef.current) {
       broadcastChannelRef.current.postMessage({
         type: 'preview-ready',
         previewId,
-        url: previewUrl,
+        url: previewUrlRef.current,
         timestamp: Date.now(),
       });
     }
-  }, [previewId, previewUrl]);
+  }, [previewId]);
 
   useEffect(() => {
     const supportsBroadcastChannel = typeof window !== 'undefined' && typeof window.BroadcastChannel === 'function';
@@ -63,23 +69,16 @@ export default function WebContainerPreview() {
       broadcastChannelRef.current = undefined;
     }
 
-    // Construct the WebContainer preview URL
-    const url = `https://${previewId}.local-credentialless.webcontainer-api.io`;
-    setPreviewUrl(url);
-
-    // Set the iframe src
+    // Set the iframe src once on mount
     if (iframeRef.current) {
-      iframeRef.current.src = url;
+      iframeRef.current.src = previewUrl;
     }
-
-    // Notify other tabs that this preview is ready
-    notifyPreviewReady();
 
     // Cleanup
     return () => {
       broadcastChannelRef.current?.close();
     };
-  }, [previewId, handleRefresh, notifyPreviewReady]);
+  }, [previewId, previewUrl, handleRefresh]);
 
   return (
     <div className="w-full h-full">

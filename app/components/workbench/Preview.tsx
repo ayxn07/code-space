@@ -161,18 +161,25 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
     session.updateFiles(filesStore);
   }, [filesStore]);
 
+  /*
+   * Track the baseUrl string rather than the activePreview object reference.
+   * The previews nanostore creates new object references on every update
+   * (via array spread), so depending on the object would cause spurious
+   * iframe reloads even when the URL hasn't actually changed.
+   */
+  const activeBaseUrl = activePreview?.baseUrl;
+
   useEffect(() => {
-    if (!activePreview) {
+    if (!activeBaseUrl) {
       setIframeUrl(undefined);
       setDisplayPath('/');
 
       return;
     }
 
-    const { baseUrl } = activePreview;
-    setIframeUrl(baseUrl);
+    setIframeUrl(activeBaseUrl);
     setDisplayPath('/');
-  }, [activePreview]);
+  }, [activeBaseUrl]);
 
   const findMinPortIndex = useCallback(
     (minIndex: number, preview: { port: number }, index: number, array: { port: number }[]) => {

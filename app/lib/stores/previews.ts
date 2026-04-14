@@ -241,19 +241,21 @@ export class PreviewsStore {
       clearTimeout(existingTimeout);
     }
 
-    // Set a new timeout for this refresh
+    // Set a new timeout for this refresh (debounce rapid calls)
     const timeout = setTimeout(() => {
       const previews = this.previews.get();
       const preview = previews.find((p) => this.getPreviewId(p.baseUrl) === previewId);
 
       if (preview) {
-        preview.ready = false;
+        /*
+         * Single nanostore update — no ready toggle.
+         * Next.js HMR handles the actual reload in the iframe;
+         * we only need to signal nanostore subscribers that
+         * something changed so they can pick up a new baseUrl
+         * if it was updated.  Spreading creates a new array
+         * reference which is enough to notify subscribers.
+         */
         this.previews.set([...previews]);
-
-        requestAnimationFrame(() => {
-          preview.ready = true;
-          this.previews.set([...previews]);
-        });
       }
 
       this.#refreshTimeouts.delete(previewId);
