@@ -582,12 +582,12 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
           {/* Drag handle for resizing chat/workbench panels */}
           {chatStarted && showWorkbench && (
             <div
-              className="hidden lg:flex items-center justify-center w-[6px] shrink-0 cursor-col-resize group hover:bg-bolt-elements-borderColor/50 active:bg-accent-500/30 transition-colors"
+              className="hidden lg:flex items-center justify-center w-[6px] shrink-0 cursor-col-resize group hover:bg-bolt-elements-borderColor/50 active:bg-accent-500/30 transition-colors relative z-[4]"
               onMouseDown={handleResizeMouseDown}
               onDoubleClick={handleResizeDoubleClick}
               title="Drag to resize. Double-click to reset."
             >
-              <div className="w-[2px] h-8 rounded-full bg-bolt-elements-borderColor group-hover:bg-accent-500 group-active:bg-accent-500 transition-colors" />
+              <div className="w-[2px] h-12 rounded-full bg-bolt-elements-borderColor/60 group-hover:bg-accent-500 group-active:bg-accent-500 transition-colors" />
             </div>
           )}
           <ClientOnly>
