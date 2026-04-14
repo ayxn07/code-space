@@ -424,7 +424,12 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       >
         <ClientOnly>{() => <Menu />}</ClientOnly>
         <div ref={flexRowRef} className="flex flex-col lg:flex-row overflow-y-auto w-full h-full">
-          <div className={classNames(styles.Chat, 'flex flex-col flex-grow lg:min-w-[var(--chat-min-width)] h-full')}>
+          <div
+            className={classNames(
+              styles.Chat,
+              'flex flex-col flex-grow lg:min-w-[var(--chat-min-width)] overflow-x-hidden h-full',
+            )}
+          >
             {!chatStarted && (
               <div id="intro" className="mt-[16vh] max-w-2xl mx-auto text-center px-4 lg:px-0">
                 <h1 className="text-3xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-4 animate-fade-in">
@@ -582,12 +587,16 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
           {/* Drag handle for resizing chat/workbench panels */}
           {chatStarted && showWorkbench && (
             <div
-              className="hidden lg:flex items-center justify-center w-[6px] shrink-0 cursor-col-resize group hover:bg-bolt-elements-borderColor/50 active:bg-accent-500/30 transition-colors relative z-[4]"
+              className="hidden lg:flex flex-col items-center justify-center w-[var(--resize-handle-width)] shrink-0 cursor-col-resize group hover:bg-bolt-elements-borderColor/30 active:bg-accent-500/20 transition-colors relative z-[4]"
               onMouseDown={handleResizeMouseDown}
               onDoubleClick={handleResizeDoubleClick}
               title="Drag to resize. Double-click to reset."
             >
-              <div className="w-[2px] h-12 rounded-full bg-bolt-elements-borderColor/60 group-hover:bg-accent-500 group-active:bg-accent-500 transition-colors" />
+              <div className="flex flex-col gap-1 items-center">
+                <div className="w-1 h-1 rounded-full bg-bolt-elements-textTertiary group-hover:bg-accent-500 transition-colors" />
+                <div className="w-1 h-1 rounded-full bg-bolt-elements-textTertiary group-hover:bg-accent-500 transition-colors" />
+                <div className="w-1 h-1 rounded-full bg-bolt-elements-textTertiary group-hover:bg-accent-500 transition-colors" />
+              </div>
             </div>
           )}
           <ClientOnly>
