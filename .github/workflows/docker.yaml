@@ -1,8 +1,8 @@
 name: Docker Publish
 
 on:
-  push:
-    branches: [main]
+  # Auto-publish to GHCR disabled: this deployment builds the image locally on the
+  # server (docker build), not from GHCR. Run manually from the Actions tab if needed.
   workflow_dispatch:
 
 concurrency:
