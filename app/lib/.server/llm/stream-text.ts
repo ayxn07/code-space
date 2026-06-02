@@ -142,8 +142,11 @@ export async function streamText(props: {
 
   const dynamicMaxTokens = modelDetails ? getCompletionTokenLimit(modelDetails) : Math.min(MAX_TOKENS, 16384);
 
-  // Use model-specific limits directly - no artificial cap needed
-  const safeMaxTokens = dynamicMaxTokens;
+  // Cap OUTPUT tokens to a safe ceiling. Some OpenRouter models report their full context
+  // window as the completion limit (e.g. Kimi K2.6 = 262144); using that as max output leaves
+  // no room for the prompt and OpenRouter rejects the request with 400 ("requested ~N tokens in
+  // the output"). 16k of output is plenty for a single turn and always leaves context headroom.
+  const safeMaxTokens = Math.min(dynamicMaxTokens, 16384);
 
   logger.info(
     `Token limits for model ${modelDetails.name}: maxTokens=${safeMaxTokens}, maxTokenAllowed=${modelDetails.maxTokenAllowed}, maxCompletionTokens=${modelDetails.maxCompletionTokens}`,
