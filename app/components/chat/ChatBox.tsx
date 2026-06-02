@@ -106,8 +106,8 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
       <div>
         <ClientOnly>
           {() => (
-            {/* Model/provider picker + API-key manager hidden (locked to OpenRouter + Kimi K2.6).
-                Kept in the tree for reuse — restore the isModelSettingsCollapsed expression to re-enable. */}
+            // Model/provider picker + API-key manager hidden (locked to OpenRouter + Kimi K2.6).
+            // Kept in the tree for reuse; restore the isModelSettingsCollapsed expression to re-enable.
             <div className="hidden">
               <ModelSelector
                 key={props.provider?.name + ':' + props.modelList.length}
