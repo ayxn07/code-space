@@ -103,14 +103,11 @@ export const ChatImpl = memo(
     const supabaseAlert = useStore(workbenchStore.supabaseAlert);
     const { activeProviders, promptId, autoSelectTemplate, contextOptimizationEnabled } = useSettings();
     const [llmErrorAlert, setLlmErrorAlert] = useState<LlmErrorAlertType | undefined>(undefined);
-    const [model, setModel] = useState(() => {
-      const savedModel = Cookies.get('selectedModel');
-      return savedModel || DEFAULT_MODEL;
-    });
-    const [provider, setProvider] = useState(() => {
-      const savedProvider = Cookies.get('selectedProvider');
-      return (PROVIDER_LIST.find((p) => p.name === savedProvider) || DEFAULT_PROVIDER) as ProviderInfo;
-    });
+    // Locked to the default provider/model (OpenRouter + Kimi K2.6). The picker is hidden
+    // in the UI, so any stale cookie selection is intentionally ignored. To re-enable user
+    // selection, restore the Cookies.get('selectedModel'/'selectedProvider') fallbacks here.
+    const [model, setModel] = useState(() => DEFAULT_MODEL);
+    const [provider, setProvider] = useState(() => DEFAULT_PROVIDER as ProviderInfo);
     const { showChat } = useStore(chatStore);
     const [animationScope, animate] = useAnimate();
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});

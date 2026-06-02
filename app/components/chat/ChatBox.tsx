@@ -106,7 +106,9 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
       <div>
         <ClientOnly>
           {() => (
-            <div className={props.isModelSettingsCollapsed ? 'hidden' : ''}>
+            {/* Model/provider picker + API-key manager hidden (locked to OpenRouter + Kimi K2.6).
+                Kept in the tree for reuse — restore the isModelSettingsCollapsed expression to re-enable. */}
+            <div className="hidden">
               <ModelSelector
                 key={props.provider?.name + ':' + props.modelList.length}
                 model={props.model}
@@ -308,7 +310,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
             </IconButton>
             <IconButton
               title="Model Settings"
-              className={classNames('transition-all flex items-center gap-1', {
+              className={classNames('hidden transition-all flex items-center gap-1', {
                 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent':
                   props.isModelSettingsCollapsed,
                 'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault':
